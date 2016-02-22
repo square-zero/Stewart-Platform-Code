@@ -22,7 +22,7 @@ LSM9DS1 imu;
 
 #ifndef CALIBRATE
   // DEBUG STATE -- (De)comment to enable various debug messages.
-  #define DEBUG
+  //#define DEBUG
   #ifdef DEBUG
     // Debug messages print to serial port, generally slows things down.
 
@@ -31,8 +31,9 @@ LSM9DS1 imu;
     //#define DEBUG_ACCEL // accelerometer
     //#define DEBUG_ACCEL_DIR // accelerometer orientation
     //#define DEBUG_SERVO // prints debug messages for servos
-    #define DEBUG_PLAT // platform orientation
+    //#define DEBUG_PLAT // platform orientation
     //#define DEBUG_LEGS // leg lengths
+    //#define DEBUG_TEST // run basic debug test
   #elif defined(GYRO_TEST)
     // something to test GYRO
   #else
@@ -64,6 +65,7 @@ const float armLen = 1; // length of servo arm, in inches
 const float legLen = 6; // length of connecting rod between servo and platform, in inches
 const float d_AngleTray = 110*deg2rad; // angle in radians between pairs of platform mounts
 const float d_AngleBase = 50*deg2rad; // angle in radians between pairs of base mounts
+const float beta[] = {0, pi, 2*pi/3, 5*pi/3, 4*pi/3, pi/3}; // beta values for servos
 
 // Various matrices in the order we need them
 float orientation[3]; // orientation vector [roll (x), pitch (y), yaw (z)]
@@ -131,14 +133,13 @@ void setup() {
   }
 
   // DEBUG SKETCH
-  #if defined(DEBUG_PLAT)
+  #if defined(DEBUG_TEST)
     setup_DEBUG();
   #elif !defined(PROG_RUN)
     // if TIME_TRIAL, will run program ten times and determine average speed
     // else, runs program one time (useful for debugging)
     //#define TIME_TRIAL
     #ifdef TIME_TRIAL
-      #undef DEBUG_ALL
       unsigned long start, end;
       float delta, deltaSum, freq;
       // run method ten times, calculate average run time
@@ -166,8 +167,6 @@ void setup() {
     #endif
   #endif
 
-  
-
 }
 
 // Some debug tests that run at startup
@@ -177,6 +176,8 @@ void setup_DEBUG() {
   float vecA[] = {pPts[0][0], pPts[0][1], pPts[0][2]};
   float vecB[] = {pPts[2][0], pPts[2][1], pPts[2][2]};
   float out[3];
+
+  Serial.println("INITIAL CONDITIONS :: ");
   calcXProduct(vecA, vecB, out, "Normal vector to platform");
   printArbMat3(pPts, 6, "Platform points");
 
@@ -185,6 +186,8 @@ void setup_DEBUG() {
   orientation[0] = 0.0;
   orientation[1] = 0.0;
   orientation[2] = 0.0;
+  Serial.println();
+  Serial.println("TEST CASE 1 :: NO TILT");
   selfBalanceDEBUG();
 
   for (int i = 0; i < 3; i++) {
@@ -197,9 +200,11 @@ void setup_DEBUG() {
   printArbMat3(platDisp, 6, "Platform points");
 
   // change orientation, repeat selfBalanceDEBUG() and compare results
-  orientation[0] = 1.0;
-  orientation[1] = 1.0;
+  orientation[0] = 10.0*deg2rad;
+  orientation[1] = 0.0;
   orientation[2] = 0.0;
+  Serial.println();
+  Serial.println("TEST CASE 2 :: PLATFORM ROLL");
   selfBalanceDEBUG();
 
   for (int i = 0; i < 3; i++) {
@@ -212,7 +217,6 @@ void setup_DEBUG() {
 
 // Main loop
 void loop() {
-  
   #ifdef RUN_PROG
     selfBalance();
     // Repeat forever!
@@ -253,7 +257,7 @@ void selfBalance() {
 
   // Output the pulse widths to the output PWM to drive each servo
   /* METHOD WRITTEN, NOT TESTED */
-  //setPulseWidths(servo, servoPulseWidths);
+  setPulseWidths(servo, servoPulseWidths);
 }
 
 // Self-balancing routine using reverse-kinematics
@@ -276,71 +280,107 @@ void selfBalanceDEBUG() {
 void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float d_AngleBase) {
   // unit vector as a starting point
   float unit[] = {1, 0, 0};
-  float tempL[3];
-  float tempR[3];
+  float tempLP[3];
+  float tempRP[3];
+  float tempLB[3];
+  float tempRB[3];
 
   // temporary storage for matrix math
-  float tempL2[3];
-  float tempR2[3];
+  float tempLP2[3];
+  float tempRP2[3];
+  float tempLB2[3];
+  float tempRB2[3];
 
   // right-wards and left-wards rotation matrices
-  float tempRotationMatrixL[9];
-  float tempRotationMatrixR[9];
+  // L/R = left- or right-rotation
+  // P/B = platform or base
+  float tempRotationMatrixLP[9];
+  float tempRotationMatrixRP[9];
+  float tempRotationMatrixLB[9];
+  float tempRotationMatrixRB[9];
 
-  // PLATFORM MOUNTS
-  calcRotMatrixZ(tempRotationMatrixR, -d_AngleTray/2);
-  calcRotMatrixZ(tempRotationMatrixL, d_AngleTray/2);
+  // PLATFORM / BASE MOUNTS
+  calcRotMatrixZ(tempRotationMatrixRP, -d_AngleTray/2);
+  calcRotMatrixZ(tempRotationMatrixLP, d_AngleTray/2);
+  calcRotMatrixZ(tempRotationMatrixRB, -d_AngleBase/2);
+  calcRotMatrixZ(tempRotationMatrixLB, d_AngleBase/2);
 
   for (int i = 0; i < 3; i++) {
-    
+
     // Rotate unit towards direction of mount 2*i, 2*i + 1
-    Matrix.Multiply(tempRotationMatrixL, unit, 3, 3, 1, tempL);
-    Matrix.Multiply(tempRotationMatrixR, unit, 3, 3, 1, tempR);
-
-    // copy tempL/R to tempL2/R2 (for matrix math)
-    for (int i = 0; i < 3; i++) {
-      tempL2[i] = tempL[i];
-      tempR2[i] = tempR[i];
-    }
-
-    // scale vectors to appropriate size
-    scaleVec(tempL2, pRad);
-    scaleVec(tempR2, pRad);
-
-    // store value in pPts
-    pPts[2*i    ][0] = tempL2[0];
-    pPts[2*i + 1][0] = tempR2[0];
-    pPts[2*i    ][1] = tempL2[1];
-    pPts[2*i + 1][1] = tempR2[1];
-    pPts[2*i    ][2] = tempL2[2];
-    pPts[2*i + 1][2] = tempR2[2];
+    Matrix.Multiply(tempRotationMatrixLP, unit, 3, 3, 1, tempLP);
+    Matrix.Multiply(tempRotationMatrixRP, unit, 3, 3, 1, tempRP);
+    Matrix.Multiply(tempRotationMatrixLB, unit, 3, 3, 1, tempLB);
+    Matrix.Multiply(tempRotationMatrixRB, unit, 3, 3, 1, tempRB);
+    
   
     // rotate by 120 degrees if not on last pair
     if (i < 2) {
 
       // three-way symmetry
-      calcRotMatrixZ(tempRotationMatrixR,  (i + 1)*120*deg2rad + d_AngleTray/2);
-      calcRotMatrixZ(tempRotationMatrixL,  (i + 1)*120*deg2rad - d_AngleTray/2);
+      calcRotMatrixZ(tempRotationMatrixRP,  (i + 1)*120*deg2rad + d_AngleTray/2);
+      calcRotMatrixZ(tempRotationMatrixLP,  (i + 1)*120*deg2rad - d_AngleTray/2);
+      calcRotMatrixZ(tempRotationMatrixRB,  (i + 1)*120*deg2rad + d_AngleBase/2);
+      calcRotMatrixZ(tempRotationMatrixLB,  (i + 1)*120*deg2rad - d_AngleBase/2);
+
+      Matrix.Multiply(tempRotationMatrixLP, tempLP, 3, 3, 1, tempLP2);
+      Matrix.Multiply(tempRotationMatrixRP, tempRP, 3, 3, 1, tempRP2);
+      Matrix.Multiply(tempRotationMatrixLB, tempLB, 3, 3, 1, tempLB2);
+      Matrix.Multiply(tempRotationMatrixRB, tempRB, 3, 3, 1, tempRB2);
+    }
+
+    // copy tempL/R to tempL2/R2 (for matrix math)
+    for (int k = 0; k < 3; k++) {
+      tempLP2[k] = tempLP[k];
+      tempRP2[k] = tempRP[k];
+      tempLB2[k] = tempLB[k];
+      tempRB2[k] = tempRB[k];
+    }
+
+    // scale vectors to appropriate size
+    scaleVec(tempLP2, pRad);
+    scaleVec(tempRP2, pRad);
+    scaleVec(tempLB2, bRad);
+    scaleVec(tempRB2, bRad);
+
+    // store value in pPts
+    pPts[2*i    ][0] = tempLP2[0];
+    pPts[2*i + 1][0] = tempRP2[0];
+    pPts[2*i    ][1] = tempLP2[1];
+    pPts[2*i + 1][1] = tempRP2[1];
+    pPts[2*i    ][2] = tempLP2[2];
+    pPts[2*i + 1][2] = tempRP2[2];
+
+    bPts[2*i    ][0] = tempLB2[0];
+    bPts[2*i + 1][0] = tempRB2[0];
+    bPts[2*i    ][1] = tempLB2[1];
+    bPts[2*i + 1][1] = tempRB2[1];
+    bPts[2*i    ][2] = tempLB2[2];
+    bPts[2*i + 1][2] = tempRB2[2];
+  }
+
+
+  #ifdef OLD
+  for (int i = 0; i < 3; i++) {
+
+    // Rotate unit towards direction of mount 2*i, 2*i + 1
+    Matrix.Multiply(tempRotationMatrixLB, unit, 3, 3, 1, tempLB);
+    Matrix.Multiply(tempRotationMatrixRB, unit, 3, 3, 1, tempRB);
+
+    // copy tempL/R to tempL2/R2 (for matrix math)
+    for (int k = 0; k < 3; k++) {
+      tempLB2[k] = tempLB[k];
+      tempRB2[k] = tempRB[k];
+    }
+
+    // rotate by 120 degrees if not on last pair
+    if (i < 2) {
+      // three-way symmetry (120*deg2rad)
+      calcRotMatrixZ(tempRotationMatrixR,  (i + 1)*120*deg2rad + d_AngleBase/2);
+      calcRotMatrixZ(tempRotationMatrixL,  (i + 1)*120*deg2rad - d_AngleBase/2);
 
       Matrix.Multiply(tempRotationMatrixL, tempL, 3, 3, 1, tempL2);
       Matrix.Multiply(tempRotationMatrixR, tempR, 3, 3, 1, tempR2);
-    }
-  }
-
-  // BASE MOUNTS
-  calcRotMatrixZ(tempRotationMatrixR, -d_AngleBase);
-  calcRotMatrixZ(tempRotationMatrixL, d_AngleBase);
-
-  for (int i = 0; i < 3; i++) {
-    
-    // Rotate unit towards direction of mount 2*i, 2*i + 1
-    Matrix.Multiply(tempRotationMatrixL, unit, 3, 3, 1, tempL);
-    Matrix.Multiply(tempRotationMatrixR, unit, 3, 3, 1, tempR);
-
-    // copy tempL/R to tempL2/R2 (for matrix math)
-    for (int i = 0; i < 3; i++) {
-      tempL2[i] = tempL[i];
-      tempR2[i] = tempR[i];
     }
 
     // scale vectors to appropriate size
@@ -354,30 +394,24 @@ void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float 
     bPts[2*i + 1][1] = tempR2[1];
     bPts[2*i    ][2] = tempL2[2];
     bPts[2*i + 1][2] = tempR2[2];
-  
-    // rotate by 120 degrees if not on last pair
-    if (i < 2) {
-      // three-way symmetry (120*deg2rad)
-      calcRotMatrixZ(tempRotationMatrixR,  (i + 1)*120*deg2rad + d_AngleBase/2);
-      calcRotMatrixZ(tempRotationMatrixL,  (i + 1)*120*deg2rad - d_AngleBase/2);
-
-      Matrix.Multiply(tempRotationMatrixL, tempL, 3, 3, 1, tempL2);
-      Matrix.Multiply(tempRotationMatrixR, tempR, 3, 3, 1, tempR2);
-    }
   }
+
+  #endif
+  
 
   // For some reason, first two points get swapped when they shouldn't.
   // This switches them back.
   // Feel free to remove this part if it turns out that I was wrong.
   for (int i = 0; i < 3; i++) {
-    tempL[i] = pPts[0][i];
+    tempLB[i] = pPts[0][i];
     pPts[0][i] = pPts[1][i];
-    pPts[1][i] = tempL[i];
+    pPts[1][i] = tempLB[i];
 
-    tempL[i] = bPts[0][i];
+    tempLB[i] = bPts[0][i];
     bPts[0][i] = bPts[1][i];
-    bPts[1][i] = tempL[i];
+    bPts[1][i] = tempLB[i];
   }
+
 
   // Prints to serial port for debugging
   #if defined(DEBUG_ALL) || defined(DEBUG_SERVO)
@@ -572,7 +606,6 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
   float y_b;
   float z_p;
   float z_b;
-  float beta = 0; // angle in radians
 
 
   for (int i = 0; i < 6; i++) {
@@ -596,7 +629,7 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
     // Calculate parameters L, M, N
     float L = calcVecMag(temp)*calcVecMag(temp) - (legLen*legLen - armLen*armLen);
     float M = 2*armLen*(z_p - z_b);
-    float N = 2*armLen*(cos(beta)*(x_p - x_b) + sin(beta)*(y_p - y_b));
+    float N = 2*armLen*(cos(beta[i])*(x_p - x_b) + sin(beta[i])*(y_p - y_b));
 
     // Calculate the angle
     servoAngles[i] = asin(L/sqrt(M*M + N*N)) - atan(N/M);
@@ -604,16 +637,11 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
     #ifdef DEBUG_ALL
       Serial.println();
       Serial.println("Calculating alpha for leg " + (String)(i));
-      Serial.println("Beta = " + (String)(beta));
+      Serial.println("Beta = " + (String)(beta[i]));
       Serial.println("L = " + (String)(L));
       Serial.println("M = " + (String)(M));
       Serial.println("N = " + (String)(N));
     #endif
-
-    // increment beta-value for servo (if necessary)
-    if (i % 2 == 1) {
-      beta += 120*deg2rad;
-    }
   }
 
   #ifdef DEBUG_ALL
@@ -725,3 +753,8 @@ void calcXProduct(float vecA[], float vecB[], float out[], String id) {
     Serial.println(id + ": " + (String)(out[0]) + "*i, " + (String)(out[1]) + "*j, " + (String)(out[2]) + "*k");
   #endif
 }
+
+
+
+
+
