@@ -34,6 +34,7 @@ LSM9DS1 imu;
     //#define DEBUG_PLAT // platform orientation
     //#define DEBUG_LEGS // leg lengths
     //#define DEBUG_TEST // run basic debug test
+    #define DEBUG_SERVO_ANGLES // servo angles + height constants
   #elif defined(GYRO_TEST)
     // something to test GYRO
   #else
@@ -62,10 +63,16 @@ const float pRad = 2.5; // distance between center of platform and mounting poin
 float bPts[6][3]; // XYZ coords for six "mount points" on the base
 float pPts[6][3]; // XYZ coords for six "mount points" on an untilted platform
 const float armLen = 1; // length of servo arm, in inches
-const float legLen = 6; // length of connecting rod between servo and platform, in inches
+const float legLen = 7.25; // length of connecting rod between servo and platform, in inches
 const float d_AngleTray = 110*deg2rad; // angle in radians between pairs of platform mounts
 const float d_AngleBase = 50*deg2rad; // angle in radians between pairs of base mounts
-const float beta[] = {0, pi, 2*pi/3, 5*pi/3, 4*pi/3, pi/3}; // beta values for servos
+#ifdef OLD
+  // offset odd motors by pi radians.
+  // turns out that this causes problems.
+  const float beta[] = {0, pi, 2*pi/3, 5*pi/3, 4*pi/3, pi/3}; // beta values for servos
+#else
+  const float beta[] = {0, 0, 2*pi/3, 2*pi/3, 4*pi/3, 4*pi/3}; // beta values for servos
+#endif
 
 // Various matrices in the order we need them
 float orientation[3]; // orientation vector [roll (x), pitch (y), yaw (z)]
@@ -103,8 +110,13 @@ void setup() {
   float L = 2*armLen*armLen;
   float M = 2*armLen*(pPts[0][0] - bPts[0][0]);
   float N = 2*armLen*(h_o + pPts[0][2]);
-  alpha_o = asin(L/(M*M + N*N));
+  alpha_o = asin(L/(M*M + N*N)) - atan(M/N);
 
+  #ifdef DEBUG_SERVO_ANGLES
+    Serial.println("Platform default height + angles:");
+    Serial.println("Default height       : " + (String)(h_o) + " inches");
+    Serial.println("Default servo angle  : " + (String)(alpha_o*rad2deg) + " degrees");
+  #endif
   // ensures that all arduino power pins power-up fully
   delay(1000);
   
@@ -632,8 +644,11 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
     float N = 2*armLen*(cos(beta[i])*(x_p - x_b) + sin(beta[i])*(y_p - y_b));
 
     // Calculate the angle
-    servoAngles[i] = asin(L/sqrt(M*M + N*N)) - atan(N/M);
-
+    if (i%2 == 0) {
+      servoAngles[i] = asin(L/sqrt(M*M + N*N)) - atan(N/M);
+    } else {
+      servoAngles[i] = /* pi - */ (asin(L/sqrt(M*M + N*N)) - atan(N/M));
+    }
     #ifdef DEBUG_ALL
       Serial.println();
       Serial.println("Calculating alpha for leg " + (String)(i));
@@ -644,7 +659,7 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
     #endif
   }
 
-  #ifdef DEBUG_ALL
+  #if defined(DEBUG_ALL) || defined(DEBUG_SERVO_ANGLES)
     Serial.println();
     Serial.println("Servo angles (degrees) : ");
     for (int i = 0; i < 6; i++) {
@@ -664,7 +679,7 @@ void calcPulseWidths(float servoPulseWidths[], float angles[]) {
     servoPulseWidths[2*i + 1] = DEFAULT_PULSE_WIDTH - ((angles[2*i + 1] - alpha_o))*r_o;
   }
 
-  #ifdef DEBUG_ALL
+  #if defined(DEBUG_ALL) || defined(DEBUG_SERVO_ANGLES)
     Serial.println();
     Serial.println("Servo Pulse Widths");
     for (int i = 0; i < 6; i++) {
@@ -753,8 +768,5 @@ void calcXProduct(float vecA[], float vecB[], float out[], String id) {
     Serial.println(id + ": " + (String)(out[0]) + "*i, " + (String)(out[1]) + "*j, " + (String)(out[2]) + "*k");
   #endif
 }
-
-
-
 
 
