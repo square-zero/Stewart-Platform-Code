@@ -314,18 +314,18 @@ class TetheredDriveApp(Tk):
             elif k == 'G': #this is the key for doing the wavefront path planning
                 self.getWavefrontDriver()
             elif k == 'Q':#drive in a square
-                self.sendCommandASCII('137 255 56 80 00') #drive
-                time.sleep(1)#pause?
+                self.sendCommandASCII('137 255 72 80 00') #drive: the first 2 commands are to drive forward the length of the robot
+                time.sleep(1)#pause
+                self.sendCommandASCII('137 255 75 80 00') #drive
+                time.sleep(1)#pause
+                self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                time.sleep(1)#pause
+                self.sendCommandASCII('137 00 188 80 00') #drive
+                time.sleep(1)#pause
                 self.sendCommandASCII('137 255 56 255 255') #turn clockwise
                 time.sleep(1) #pause for 90degree turn?
-                self.sendCommandASCII('137 255 56 80 00')
+                self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                 time.sleep(1)#pause?
-                self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                time.sleep(1)#pause?
-                self.sendCommandASCII('137 255 56 80 00')
-                time.sleep(1)#pause?
-                self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                time.sleep(1)#pause
                 self.sendCommandASCII('137 00 00 00 00') #stop
             elif k == 'R': #drive in a circle, reverse velocity -200 w/ r=500mm
                 self.sendCommandASCII('137 255 56 1 244')
@@ -380,7 +380,7 @@ class TetheredDriveApp(Tk):
         #    port = tkSimpleDialog.askstring('Port?', 'Enter COM port to open.')
         
         #here I was trying to set the port manually wihout the lame prompt but it's not working
-        port = "/dev/ttyUSB0"
+        port = "/dev/ttyUSB1"
         print "Trying " + str(port) + "... "
         try:
             connection = serial.Serial(port, baudrate=115200, timeout=1)
