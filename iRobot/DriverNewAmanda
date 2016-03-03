@@ -217,62 +217,98 @@ class TetheredDriveApp(Tk):
             #GOING SOUTH
             elif (prevX + 1 == currX):
                 if compass == "South":
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#pause
                 elif compass == "North":
                     #want to rotate 180 degrees
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                    time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                    time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') 
-                elif compass == "East":
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                    time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
-                elif compass == "West":
                     self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space 
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive 
+                    time.sleep(1)#p
+                elif compass == "East":
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p 
+                elif compass == "West":
+                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p  
                 compass = "South"
             #GOING WEST
             elif (prevY - 1 == currY):
                 if compass == "South":
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                    time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
-                elif compass == "North":
                     self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p  
+                elif compass == "North":
+                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p 
                 elif compass == "East":
                     #want to rotate 180 degrees
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') 
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p 
                 elif compass == "West":
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space 
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p  
                 compass = "West"
             #GOING EAST   
             elif (prevY + 1 == currY):
                 if compass == "South":
+                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p
+                elif compass == "North":
                     self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
-                elif compass == "North":
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
-                    time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p
                 elif compass == "East":
-                    self.sendCommandASCII('137 255 56 80 00') #the question is how many of these drive commands do we need to get to next grid space  
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p  
                 elif compass == "West":
                     #want to rotate 180 degrees
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 255 255') #turn clockwise
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
                     time.sleep(1) #pause for 90degree turn
-                    self.sendCommandASCII('137 255 56 80 00')  
+                    self.sendCommandASCII('137 00 168 80 00') #drive: the next 2 commands are to drive backwards the length of the robot (almost)
+                    time.sleep(1)#pause
+                    self.sendCommandASCII('137 00 188 80 00') #drive
+                    time.sleep(1)#p  
                 compass = "East"
              
             #update the prev to the currX     
