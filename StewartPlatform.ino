@@ -17,33 +17,35 @@
 // named anything, we'll refer to that throught the sketch.
 LSM9DS1 imu;
 
-// Calibration stage -- resets servos and does not run the program
-//#define CALIBRATE
+// Defining maximum tilt values to prevent the platform from ripping itself apart
+#define MAX_PLAT_TILT  // Prevents platform from tilting beyond MAX_TILT in any direction
+#define MAX_ROLL_X        12*deg2rad        // Maximum allowable roll
+#define MAX_PITCH_Y       12*deg2rad        // ""       ""       pitch
+#define MAX_YAW_Z         5*deg2rad        // ""       ""       yaw
 
+// Defining maximum PWM widths that can be sent to servos
+#define MAX_SERVO_PULSE   2200      // 2200 u-seconds
+#define MIN_SERVO_PULSE   800       // 800  u-seconds
+
+// Calibration stage -- resets servos and does not run the program
+//#define CALIBRATE // Disables program, pushes neutral PWM to all servos for calibration
 #ifndef CALIBRATE
   // DEBUG STATE -- (De)comment to enable various debug messages.
   //#define DEBUG
-  #ifdef DEBUG
-    // Debug messages print to serial port, generally slows things down.
-
-    //#define DEBUG_ALL // prints debug messages for EVERYTHING -- consumes a lot of memory
-    // otherwise, select which debug messages to use
-    //#define DEBUG_ACCEL // accelerometer
-    //#define DEBUG_ACCEL_DIR // accelerometer orientation
-    //#define DEBUG_SERVO // prints debug messages for servos
-    //#define DEBUG_PLAT // platform orientation
-    //#define DEBUG_LEGS // leg lengths
-    //#define DEBUG_TEST // run basic debug test
-    #define DEBUG_SERVO_ANGLES // servo angles + height constants
+  #ifndef DEBUG
+    #define RUN_PROG // run the program if not in debug state
   #elif defined(GYRO_TEST)
     // something to test GYRO
   #else
-    // Otherwise, run the program
-    #define RUN_PROG
+    //#define DEBUG_ALL           // prints debug messages for EVERYTHING -- consumes a lot of memory
+    //#define DEBUG_ACCEL         // accelerometer
+    //#define DEBUG_ACCEL_DIR     // accelerometer orientation
+    //#define DEBUG_SERVO         // prints debug messages for servos
+    //#define DEBUG_PLAT          // platform orientation
+    //#define DEBUG_LEGS          // leg lengths
+    //#define DEBUG_TEST          // run basic debug test
+    //#define DEBUG_SERVO_ANGLES  // servo angles + height constants
   #endif
-
-
-
 #endif
 
 // MATH CONSTANTS
@@ -58,28 +60,32 @@ Servo servo[6];
 
 // Parameters for Stewart Platform:
 /* THESE NEED TO BE MEASURED */
-const float bRad = 4; // distance between center of base and servo arm (inches)
-const float pRad = 2.5; // distance between center of platform and mounting point on tray (inches)
-float bPts[6][3]; // XYZ coords for six "mount points" on the base
-float pPts[6][3]; // XYZ coords for six "mount points" on an untilted platform
-const float armLen = 1; // length of servo arm, in inches
-const float legLen = 7.25; // length of connecting rod between servo and platform, in inches
-const float d_AngleTray = 110*deg2rad; // angle in radians between pairs of platform mounts
-const float d_AngleBase = 50*deg2rad; // angle in radians between pairs of base mounts
+const float B_RAD = 4;                      // distance between center of base and servo arm (inches)
+const float P_RAD = 2.5;                    // distance between center of platform and mounting point on tray (inches)
+const float ARM_LEN = 1;                    // length of servo arm, in inches
+const float LEG_LEN = 7.25;                 // length of connecting rod between servo and platform, in inches
+const float ANGLE_DIFF_PLAT = 110*deg2rad;  // angle in radians between pairs of platform mounts
+const float ANGLE_DIFF_BASE = 50*deg2rad;   // angle in radians between pairs of base mounts
+#ifdef MAX_PLAT_TILT
+  const float MAX_TILT[3] = {MAX_ROLL_X, MAX_PITCH_Y, MAX_YAW_Z}; // maximum tilt
+#endif
+// Beta values for servos
 #ifdef OLD
   // offset odd motors by pi radians.
   // turns out that this causes problems.
-  const float beta[] = {0, pi, 2*pi/3, 5*pi/3, 4*pi/3, pi/3}; // beta values for servos
+  const float beta[] = {0, pi, 2*pi/3, 5*pi/3, 4*pi/3, pi/3};         // beta values for servos
 #else
-  const float beta[] = {0, 0, 2*pi/3, 2*pi/3, 4*pi/3, 4*pi/3}; // beta values for servos
+  // these values seem to work
+  const float beta[] = {pi/3, pi/3, 3*pi/3, 3*pi/3, 5*pi/3, 5*pi/3};  // beta values for servos
 #endif
 
 // Various matrices in the order we need them
+float bPts[6][3]; // XYZ coords for six "mount points" on the base
+float pPts[6][3]; // XYZ coords for six "mount points" on an untilted platform
 float orientation[3]; // orientation vector [roll (x), pitch (y), yaw (z)]
 float acceleration[3]; // acceleration vector [a_x, a_y, a_z]
 float platformRotationMatrix[9];
-float platformPosition[6]; // [X, Y, Z, x_a, y_a, z_a]
-float tHome[3]; // default displacement vector from base to tray
+float platformPosition[6]; // [X, Y, Z, x_angle, y_angle, z_angle]
 float tDisp[3]; // actual displacement vector
 float legLengths[6][3];  // lengths of individual legs of the platform represented as vectors
 float platDisp[6][3]; // displacement vectors from center of base to connecting points on legs
@@ -97,19 +103,18 @@ void setup() {
   Serial.begin(115200);
   
   // calculate mount points for platform
-  calcMountPoints(pPts, bPts, d_AngleTray, d_AngleBase);
+  calcMountPoints(pPts, bPts, ANGLE_DIFF_PLAT, ANGLE_DIFF_BASE);
 
   // calculate h_o (default platform height)
-  h_o = sqrt(  armLen*armLen
-             + legLen*legLen 
+  h_o = sqrt(  ARM_LEN*ARM_LEN
+             + LEG_LEN*LEG_LEN 
              - (bPts[0][0]*bPts[0][0] - pPts[0][0]*pPts[0][0])
              - (bPts[0][1]*bPts[0][1] - pPts[0][1]*pPts[0][1]));
-  tHome[2] = h_o;
 
   // calc alpha_o (default servo angle)
-  float L = 2*armLen*armLen;
-  float M = 2*armLen*(pPts[0][0] - bPts[0][0]);
-  float N = 2*armLen*(h_o + pPts[0][2]);
+  float L = 2*ARM_LEN*ARM_LEN;
+  float M = 2*ARM_LEN*(pPts[0][0] - bPts[0][0]);
+  float N = 2*ARM_LEN*(h_o + pPts[0][2]);
   alpha_o = asin(L/(M*M + N*N)) - atan(M/N);
 
   #ifdef DEBUG_SERVO_ANGLES
@@ -140,9 +145,9 @@ void setup() {
 
   // Input positional information about the platform
   /* SUBJECT TO CHANGE UPON PLATFORM CONSTRUCTION */
-  for (int i = 0; i < 3; i++) {
-    tDisp[i] = tHome[i];
-  }
+  tDisp[0] = 0;
+  tDisp[1] = 0;
+  tDisp[2] = h_o;
 
   // DEBUG SKETCH
   #if defined(DEBUG_TEST)
@@ -237,38 +242,31 @@ void loop() {
 
 // Self-balancing routine using reverse-kinematics
 void selfBalance() {
-  
-  /* Following methods commented out until Gyroscope input desired.
-   * Until such a time, this code will run on manual input, given 
-   * one time at the beginning of the program.
-   */
-
   // Read acceleration from Gyroscope
   readGyro(acceleration);
 
   // Calculate orientation from Gyroscope
-  /* METHOD BEING WRITTEN, NOT COMPLETE */
+  /* METHOD WRITTEN, NOT FULLY TESTED */
   calcOrientation(orientation, acceleration);
-
 
   // Calculate rotational matrix
   /* METHOD WRITTEN, TESTED */
   calcRotMatrix(platformRotationMatrix, orientation);
 
   // Calculate effective leg lengths
-  /* METHOD WRITTEN, TESTED. NOT FULLY VERIFIED */
+  /* METHOD WRITTEN, NOT FULLY TESTED */
   calcLegLengths2(legLengths, desiredPos);
   
   // Calculate the angles required for each servo
-  /* METHOD WRITTEN, TESTED. NOT FULLY VERIFIED */
+  /* METHOD WRITTEN, TESTED */
   calcServoAngles(legLengths, servoAngles);
 
   // Calculate the pulse widths required for each servo
-  /* METHOD WRITTEN, NOT TESTED */
+  /* METHOD WRITTEN, TESTED */
   calcPulseWidths(servoPulseWidths, servoAngles);
 
   // Output the pulse widths to the output PWM to drive each servo
-  /* METHOD WRITTEN, NOT TESTED */
+  /* METHOD WRITTEN, TESTED */
   setPulseWidths(servo, servoPulseWidths);
 }
 
@@ -276,6 +274,13 @@ void selfBalance() {
 // MOSTLY IDENTICAL to selfBalance, except for debugging 
 // Refer to selfBalance() for comments
 void selfBalanceDEBUG() {
+
+  /* 
+   *    Manual input must be specified in advance.
+   *    Real-time control with gyroscope disabled.
+   *    Can be re-enabled by uncommenting the methods below.
+   */
+
   //readGyro(acceleration);
   //calcOrientation(orientation, acceleration);
   calcRotMatrix(platformRotationMatrix, orientation);
@@ -289,7 +294,7 @@ void selfBalanceDEBUG() {
 // given physical information about the platform
 ///////
 // Assumes three-way symmetry, with an angular difference (d_Angle) between pairs
-void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float d_AngleBase) {
+void calcMountPoints(float pPts[][3], float bPts[][3], float d_AnglePlat, float d_AngleBase) {
   // unit vector as a starting point
   float unit[] = {1, 0, 0};
   float tempLP[3];
@@ -312,8 +317,8 @@ void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float 
   float tempRotationMatrixRB[9];
 
   // PLATFORM / BASE MOUNTS
-  calcRotMatrixZ(tempRotationMatrixRP, -d_AngleTray/2);
-  calcRotMatrixZ(tempRotationMatrixLP, d_AngleTray/2);
+  calcRotMatrixZ(tempRotationMatrixRP, -d_AnglePlat/2);
+  calcRotMatrixZ(tempRotationMatrixLP, d_AnglePlat/2);
   calcRotMatrixZ(tempRotationMatrixRB, -d_AngleBase/2);
   calcRotMatrixZ(tempRotationMatrixLB, d_AngleBase/2);
 
@@ -330,8 +335,8 @@ void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float 
     if (i < 2) {
 
       // three-way symmetry
-      calcRotMatrixZ(tempRotationMatrixRP,  (i + 1)*120*deg2rad + d_AngleTray/2);
-      calcRotMatrixZ(tempRotationMatrixLP,  (i + 1)*120*deg2rad - d_AngleTray/2);
+      calcRotMatrixZ(tempRotationMatrixRP,  (i + 1)*120*deg2rad + d_AnglePlat/2);
+      calcRotMatrixZ(tempRotationMatrixLP,  (i + 1)*120*deg2rad - d_AnglePlat/2);
       calcRotMatrixZ(tempRotationMatrixRB,  (i + 1)*120*deg2rad + d_AngleBase/2);
       calcRotMatrixZ(tempRotationMatrixLB,  (i + 1)*120*deg2rad - d_AngleBase/2);
 
@@ -350,10 +355,10 @@ void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float 
     }
 
     // scale vectors to appropriate size
-    scaleVec(tempLP2, pRad);
-    scaleVec(tempRP2, pRad);
-    scaleVec(tempLB2, bRad);
-    scaleVec(tempRB2, bRad);
+    scaleVec(tempLP2, P_RAD);
+    scaleVec(tempRP2, P_RAD);
+    scaleVec(tempLB2, B_RAD);
+    scaleVec(tempRB2, B_RAD);
 
     // store value in pPts
     pPts[2*i    ][0] = tempLP2[0];
@@ -396,8 +401,8 @@ void calcMountPoints(float pPts[][3], float bPts[][3], float d_AngleTray, float 
     }
 
     // scale vectors to appropriate size
-    scaleVec(tempL2, bRad);
-    scaleVec(tempR2, bRad);
+    scaleVec(tempL2, B_RAD);
+    scaleVec(tempR2, B_RAD);
 
     // store value in pPts
     bPts[2*i    ][0] = tempL2[0];
@@ -494,13 +499,24 @@ void calcOrientation(float orientation[], float acceleration[]) {
   orientation[0] = asin(-unit[1]);
 
   // PLATFORM PITCH --- NORM ROLL
-  orientation[1] = atan2(unit[0], unit[2]);
+  orientation[1] = -atan2(unit[0], unit[2]);
 
   // PLATFORM YAW   --- NORM PITCH
   // platform YAW is immaterial. This value can theoretically be set to anything
   // but to minimize the risk of problems, we'll leave it at zero for now.
   orientation[2] = 0;
 
+  // Safety to ensure that platform doesn't tilt too far (and possibly break)
+  // MAX_TILT should be determined experimentally.
+  #ifdef MAX_PLAT_TILT
+    for (int i = 0; i < 2; i++) {
+      if (orientation[i] > MAX_TILT[i]) {
+        orientation[i] = MAX_TILT[i];
+      } else if (orientation[i] < -MAX_TILT[i]) {
+        orientation[i] = -MAX_TILT[i];
+      }
+    }
+  #endif
 
   #if defined(DEBUG_ALL) || defined(DEBUG_ACCEL_DIR)
     Serial.println();
@@ -604,8 +620,9 @@ void calcLegLengths2(float legLengths[][3], float pos[]) {
 // INPUT displacement, an XYZ vector
 void calcT2(float T[], float displacement[]) {
   for (int i = 0; i < 3; i++) {
-    T[i] = displacement[i] + tHome[i];
+    T[i] = displacement[i];
   }
+  T[2] += h_o;
 }
 
 // Using the calculated leg lengths, determine the angle that the servos
@@ -639,9 +656,9 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
 
     // This part should be correct.
     // Calculate parameters L, M, N
-    float L = calcVecMag(temp)*calcVecMag(temp) - (legLen*legLen - armLen*armLen);
-    float M = 2*armLen*(z_p - z_b);
-    float N = 2*armLen*(cos(beta[i])*(x_p - x_b) + sin(beta[i])*(y_p - y_b));
+    float L = calcVecMag(temp)*calcVecMag(temp) - (LEG_LEN*LEG_LEN - ARM_LEN*ARM_LEN);
+    float M = 2*ARM_LEN*(z_p - z_b);
+    float N = 2*ARM_LEN*(cos(beta[i])*(x_p - x_b) + sin(beta[i])*(y_p - y_b));
 
     // Calculate the angle
     if (i%2 == 0) {
@@ -649,6 +666,15 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
     } else {
       servoAngles[i] = /* pi - */ (asin(L/sqrt(M*M + N*N)) - atan(N/M));
     }
+
+    #ifdef MAX_SERVO_ANGLE
+      if (servoAngles[i] > MAX_SERVO_ANGLE) {
+        servoAngles[i] = MAX_SERVO_ANGLE;
+      } else if (servoAngles[i] < -MAX_SERVO_ANGLE) {
+        servoAngles[i] = -MAX_SERVO_ANGLE;
+      }
+    #endif
+
     #ifdef DEBUG_ALL
       Serial.println();
       Serial.println("Calculating alpha for leg " + (String)(i));
@@ -673,10 +699,18 @@ void calcServoAngles(float legLengths[][3], float servoAngles[]) {
 void calcPulseWidths(float servoPulseWidths[], float angles[]) {
   for (int i = 0; i < 3; i++) {
     // EVEN SERVOS (0, 2, 4)
-    servoPulseWidths[2*i    ] = DEFAULT_PULSE_WIDTH + ((angles[2*i] - alpha_o))*r_o;
+    servoPulseWidths[2*i    ] = DEFAULT_PULSE_WIDTH + ((angles[2*i    ] - alpha_o))*r_o;
     
     // ODD SERVOS (1, 3, 5)
     servoPulseWidths[2*i + 1] = DEFAULT_PULSE_WIDTH - ((angles[2*i + 1] - alpha_o))*r_o;
+  }
+
+  for (int i = 0; i < 6; i++) {
+    if (servoPulseWidths[i] > MAX_PULSE_WIDTH) {
+      servoPulseWidths[i] = MAX_PULSE_WIDTH;
+    } else if (servoPulseWidths[i] < MIN_PULSE_WIDTH) {
+      servoPulseWidths[i] = MIN_PULSE_WIDTH;
+    }
   }
 
   #if defined(DEBUG_ALL) || defined(DEBUG_SERVO_ANGLES)
@@ -703,13 +737,9 @@ void resetServos() {
   }
 }
 
-// Calculates (and returns) the magnitude of a vectorin R3
+// Calculates (and returns) the magnitude of a vector in R3
 float calcVecMag(float v[]) {
-  float temp;
-  for (int i = 0; i < 3; i++) {
-    temp += v[i]*v[i];
-  }
-  return sqrt(temp);
+  return sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
 }
 
 // prints out an m x 3 matrix to the serial port
