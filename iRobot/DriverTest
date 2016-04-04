@@ -259,7 +259,7 @@ class TetheredDriveApp(Tk):
                 compass = "East"
             
             #after each iteration wanna drive forward
-            self.sendCommandASCII('137 00 168 80 00') #drive: forward
+            self.sendCommandASCII('137 00 148 80 00') #drive: forward
             time.sleep(1)#pause
             self.sendCommandASCII('137 00 188 80 00') #drive
             time.sleep(1)#pause 
