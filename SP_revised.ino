@@ -14,12 +14,19 @@
  *
  *    ///////////////////////
  *    // TO BE IMPLEMENTED //
- *    /////////////////////////////////////////////////////////////////////////////
+ *    ////////////////////////////////////////////////////////////////////////////////////
  *    //  This basic model is then extended to use a feedback loop using real-time data
  *    //  taken from a LSM9DS1 Inertial Measurement Unit (IMU), which measures the current
  *    //  tilt of the platform and then attempts to correct the platform so that the 
  *    //  tray is in a flat, level position. 
- *    //////////////////////////////////////
+ *
+ *    ////////////////////
+ *    // CURRENT STATUS //
+ *    ////////////////////////////////////////////////////////////////////////////////
+ *    //  You can hold the IMU in your hand and tilt it, and the Stewart platform will 
+ *    //  adjust itself to match the orientation of the IMU as best as it can.
+ *    // 
+ *    //  This should be a good foundation for implementing PID control.
  *
  *      Reference Material:
  *    Mathematics Of The Stewart Platform
