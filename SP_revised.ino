@@ -14,19 +14,12 @@
  *
  *    ///////////////////////
  *    // TO BE IMPLEMENTED //
- *    ////////////////////////////////////////////////////////////////////////////////////
+ *    /////////////////////////////////////////////////////////////////////////////
  *    //  This basic model is then extended to use a feedback loop using real-time data
  *    //  taken from a LSM9DS1 Inertial Measurement Unit (IMU), which measures the current
  *    //  tilt of the platform and then attempts to correct the platform so that the 
  *    //  tray is in a flat, level position. 
- *
- *    ////////////////////
- *    // CURRENT STATUS //
- *    ////////////////////////////////////////////////////////////////////////////////
- *    //  You can hold the IMU in your hand and tilt it, and the Stewart platform will 
- *    //  adjust itself to match the orientation of the IMU as best as it can.
- *    // 
- *    //  This should be a good foundation for implementing PID control.
+ *    //////////////////////////////////////
  *
  *      Reference Material:
  *    Mathematics Of The Stewart Platform
@@ -82,6 +75,7 @@
   //#define DEBUG_SERVO         // prints debug messages for servos
   //#define DEBUG_PLAT          // prints debug messages for the mount points
   //#define DEBUG_LEGS          // prints debug messages for the leg lengths
+  #define DEBUG_PID           // prints debug messages about PID controller
 #else
   #define RUN_PROG
 #endif
@@ -192,13 +186,30 @@ float alpha_o;
  *              ((Stored as a 9x1 vector for compatability with MatrixMath))
  *  legVectors[6][3]  -- R^3 vectors which store the displacement between the i'th base point
  *                        and the i'th platform mount
+ *  legLength[6]      -- scalar magnitudes which measure the length of the i'th leg (in inches)
+ *  legVelocity[6]    -- scalar magnitudes for change in the length of the i'th leg (in inches / second)
  *  tDisp[3]          -- platform displacement vector (XYZ) which controls the cartesian coordinates of the platform
  */
 float bPts[6][3];
 float pPts[6][3];
 float platRMat[9];
 float legVectors[6][3];
+float legLength[6];
+float legVelocity[6];
 float tDisp[3];
+
+
+/*
+ *  PID Parameters
+ *
+ *  k_P -- proportional gain
+ *  k_I -- integral gain
+ *  k_D -- derivative gain
+ */
+#define PROPORTIONAL_GAIN   1
+#define INTEGRAL_GAIN       0
+#define DERIVATIVE_GAIN     0
+float k_P, k_I, k_D;
 
 /*
  *  SETUP METHOD
@@ -276,6 +287,13 @@ void setup() {
      */
     float temp[] = {0,0,1};
     calcRMat(temp);
+
+    /*
+     *  Initialize PID coefficients
+     */
+    k_P = PROPORTIONAL_GAIN;
+    k_I = INTEGRAL_GAIN;
+    k_D = DERIVATIVE_GAIN;
     
 
     Serial.println("Set-up complete.");
@@ -338,12 +356,23 @@ void loop() {
  *
  */
 void selfBalance() {
-  // Calculate orientation from Gyroscope
-  calcOrientation();
 
-  // Calculate effective leg lengths 
-  calcLegLengths();
+  /*
+   *  Calculate the reference trajectory 
+   *
+   */
+  calcRef();
 
+  /*
+   *  Input to PID controller
+   *
+   */
+  sp_PID(k_P, k_I, k_D);
+
+  /*
+   *  Adjust servo angles as needed
+   *
+   */
   // Calculate the angles required for each servo
   calcServoAngles();
 }
@@ -503,15 +532,6 @@ void calcMountPoints() {
         pPts[2*i + 1][j] = temp[j];
       }
     }
-
-    /* 
-     *  This simply reverses the y-mount points
-     *  to be compatible with our old code
-     */
-    for (int i = 0; i < 6; i++) {
-      bPts[i][1] = -bPts[i][1];
-      pPts[i][1] = -pPts[i][1];
-    }
 }
 
 /*
@@ -566,6 +586,76 @@ void calcRMat(float orientation[]) {
     platRMat[6] = -sp;
     platRMat[7] = cp*sr;
     platRMat[8] = cp*cr;
+}
+
+
+/*
+ *  calcRef()
+ *
+ *  Calculates the reference trajectory for each leg for use in our PID controller
+ *
+ *  First, it reads accelerometer data from the IMU to determine the reference tilt.
+ *  This data is then used (in PID()) to determine the required lengths of each leg in order
+ *  to position the upper platform in the desired orientation.
+ *
+ */
+void calcRef() {
+  // Calculate orientation from Gyroscope
+  calcOrientation();
+
+  // Calculate effective leg lengths 
+  calcLegLengths();
+}
+
+/*
+ *  sp_PID(k_P, k_I, k_D)
+ *
+ *  Stewart Platform PID Controller method which applies a PID controller
+ *  to each individual leg in order to help it achieve it's optimal position
+ */
+void sp_PID(float k_P, float k_I, float k_D) {
+  // Verify that all values are non-negative
+  k_P = abs(k_P);
+  k_I = abs(k_I);
+  k_D = abs(k_D);
+
+  /*
+   *  PLACEHOLDER STORAGE
+   *
+   *  Temporary storage for 
+   *  REF_POS   -- Reference position
+   *  POS       -- Actual position
+   *  VEL       -- Actual velocity
+   *  ERR_OLD   -- Most recent recorded error signal
+   *  
+   *
+   *  To be replaced, this is only here so that code compiles.
+   */
+  float REF_POS[6];
+  float POS[6];
+  float ERR_OLD[6];
+  float VEL[6];
+
+  #ifdef DEBUG_PID
+    // optional debug routine for PID
+    debugPID(k_P, k_I, k_D);
+  #endif
+
+  // PID action for each leg
+  for (int i = 0; i < 6; i++) {
+    // current error term
+    REF_POS[i] -= POS[i];
+
+    // integral error term
+    ERR_OLD[i] += REF_POS;
+
+    // new position =   proportional * error
+    //                + integral gain * integral error
+    //                + derivative gain * derivative (velocity)
+    POS[i] =    k_P*REF_POS[i] 
+              + k_I*ERR_OLD[i] 
+              + k_D*VEL[i];
+  }
 }
 
 /*
@@ -730,9 +820,20 @@ void calcLegLengths() {
     //  + X/Y/Z platform displacement
     //  + rotated mounting point vector for each leg
     //  - distance between base center and servo axis
-    legVectors[i][0] = tDisp[0] + tempOut[0] - bPts[i][0];  // X
-    legVectors[i][1] = tDisp[1] + tempOut[1] - bPts[i][1];  // Y
-    legVectors[i][2] = tDisp[2] + tempOut[2] - bPts[i][2];  // Z
+
+    for (int j = 0; j < 3; j++) {
+      tempOut[j] += tDisp[j] - bPts[i][j];
+      legVectors[i][j] = tempOut[j];
+    }
+
+    /* 
+     *  legVectors[i][0] = tDisp[0] + tempOut[0] - bPts[i][0];  // X
+     *  legVectors[i][1] = tDisp[1] + tempOut[1] - bPts[i][1];  // Y
+     *  legVectors[i][2] = tDisp[2] + tempOut[2] - bPts[i][2];  // Z
+     */
+
+    // calculate and store the magnitude for each respective leg
+    legLength[i] = calcVecMag(tempOut);
   }
 
   #ifdef DEBUG_LEGS
@@ -762,23 +863,19 @@ void calcLegLengths() {
 void calcServoAngles() {
   // initialize local storage
   float angles[6];
-  float temp[3];
-  float tempMag;
+  float temp;
 
   /*
    *  Operation for each leg
    *
    */
   for (int i = 0; i < 6; i++) {
-    // First, grab a copy of the i'th legVector
-    for (int j = 0; j < 3; j++) {
-      temp[j] = legVectors[i][j];
-    }
-    tempMag = calcVecMag(temp);
+    // First, grab a copy of the i'th leg length
+    temp = legLength[i];
 
     // Calculate parameters L, M, and N
     // see Maths of the Stewart Platform for reference
-    float L = tempMag*tempMag - (LEG_LEN*LEG_LEN - ARM_LEN*ARM_LEN);
+    float L = temp*temp - (LEG_LEN*LEG_LEN - ARM_LEN*ARM_LEN);
     float M = 2*ARM_LEN*(legVectors[i][2]);
     float N = 2*ARM_LEN*(cos(BETA[i/2])*legVectors[i][0] + sin(BETA[i/2])*legVectors[i][1]);
                             // (( i/2 because each pair of motors uses the same BETA ))
@@ -1118,4 +1215,34 @@ void readGyro() {
     #endif
   }
 
+  /*
+   *  debugPID(k_P, k_I, k_D)
+   *
+   *  Prints debug messages about PID controller to console
+   */
+  void debugPID(float k_P, float k_I, float k_D) {
+        Serial.println("PID parameters:");
+    bool hasP, hasI, hasD;
+    Serial.println("Proportional gain   : " + (String)(k_P));
+    Serial.println("Integral gain       : " + (String)(k_I));
+    Serial.println("Derivative gain     : " + (String)(k_D));
+    Serial.print("Controller type: ");
+    if (k_P == 0 && k_I == 0 && k_D == 0) {
+
+    }
+    else {
+      if (k_P > 0.0) {
+        Serial.print("P");
+      }
+      if (k_I > 0.0) {
+        Serial.print("I");
+      }
+      if (k_D > 0.0) {
+        Serial.print("D");
+      }
+      Serial.println(" controller");
+    }
+  }
+
 #endif
+
