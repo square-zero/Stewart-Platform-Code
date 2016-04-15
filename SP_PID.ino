@@ -187,37 +187,34 @@ float alpha_o;
  *  legVectors[6][3]  -- R^3 vectors which store the displacement between the i'th base point
  *                        and the i'th platform mount
  *  legLength[6]      -- scalar magnitudes which measure the length of the i'th leg (in inches)
- *  legLength2[6]     -- snap-shots of second most recent leglengths
- *  legLength3[6]     -- snap-shops of third most recent leglengths
- *  legVelocity[6]    -- velocities for the i'th leg (in inches / sec)
- *  legLengthRef[6]   -- reference value for leg lengths (in inches)
- *  legError[6]       -- integrals of error values (from beginning of time) for each leg
+ *  legVel[6]       -- velocities for the i'th leg (in inches / sec)
+ *  legRef[6]       -- reference value for leg lengths (in inches)
  *  tDisp[3]          -- platform displacement vector (XYZ) which controls the cartesian coordinates of the platform
  */
 float bPts[6][3];
 float pPts[6][3];
 float platRMat[9];
 float legVectors[6][3];
-float legLength[6];
-float legLength2[6];
-float legLength3[6];
-float legVelocity[6];
-float legLengthRef[6];
-float legError[6];
+float legLength[6], legVel[6], legRef[6];
 float tDisp[3];
-
 
 /*
  *  PID Parameters
  *
- *  k_P -- proportional gain
- *  k_I -- integral gain
- *  k_D -- derivative gain
+ *  k_P             -- proportional gain
+ *  k_I             -- integral gain
+ *  k_D             -- derivative gain
+ *  lastTime        -- last recorded system time
+ *  currentTime     -- current system time
+ *  errSum[6]       -- running sum (integral) of error signal
+ *  lastErr[6]      -- most recent value for error signal
  */
 #define PROPORTIONAL_GAIN   1
 #define INTEGRAL_GAIN       0
 #define DERIVATIVE_GAIN     0
 float k_P, k_I, k_D;
+unsigned long lastTime, currentTime;
+float errSum[6], lastErr[6];
 
 /*
  *  SETUP METHOD
@@ -299,9 +296,9 @@ void setup() {
     /*
      *  Initialize PID coefficients
      */
-    k_P = PROPORTIONAL_GAIN;
-    k_I = INTEGRAL_GAIN;
-    k_D = DERIVATIVE_GAIN;
+    sp_setPID(PROPORTIONAL_GAIN,
+              INTEGRAL_GAIN,
+              DERIVATIVE_GAIN);
 
     /*
      *  Initialize legLength[]
@@ -350,7 +347,23 @@ void setup() {
   */
 void loop() {
     #ifdef RUN_PROG
-      selfBalance();
+
+    /*
+     *  Program counts to 20milliseconds (20000 microseconds) to space the algorithm and
+     *  keep it in line with the servos, which take inputs every 20milliseconds
+     */
+
+    // First, what time are we starting at?
+    unsigned long timeRef = micros();
+
+    // Now run the program
+    selfBalance();
+
+    // Now we wait until 20mSec have passed before restarting
+    unsigned long timeNow = micros();
+    while (timeNow - timeRef < 20000) {
+      timeNow = micros();
+    }
     #endif
 }
  
@@ -365,9 +378,14 @@ void loop() {
  *  2. Based on current tilt, decide which way to tilt platform to make it level.
  *  3. Modify rotational matrix to adjust for tilt
  *  4. Using results from (3), calculate the length of each leg (assuming linear)
- *  5. Using results from (4), determine angle of each servo to achieve leg length
- *  6. Using results from (5), set servos to proper angle
- *  7. Repeat indefinitely
+ *  
+ *  5. Use the results from (4) as our reference signal for our PID controller
+ *  6. Compare the reference signal to our actual values for each leg and adjust
+ *  
+ *  7. Using results from (6), determine angle of each servo to achieve leg length
+ *  8. Using results from (7), set servos to proper angle
+ *  
+ *  9. Repeat indefinitely
  *
  */
 void selfBalance() {
@@ -382,7 +400,7 @@ void selfBalance() {
    *  Input to PID controller
    *
    */
-  sp_PID(k_P, k_I, k_D);
+  sp_PID();
 
   /*
    *  Adjust servo angles as needed
@@ -622,68 +640,58 @@ void calcRef() {
   calcLegLengths();
 }
 
-/*
- *  sp_PID(k_P, k_I, k_D)
- *
- *  Stewart Platform PID Controller method which applies a PID controller
- *  to each individual leg in order to help it achieve it's optimal position
- */
-void sp_PID(float k_P, float k_I, float k_D) {
-  // Verify that all values are non-negative
-  k_P = abs(k_P);
-  k_I = abs(k_I);
-  k_D = abs(k_D);
 
-  /*
-   *  PLACEHOLDER STORAGE
-   *
-   *  Temporary storage for 
-   *  REF_POS   -- Reference position
-   *  POS       -- Actual position
-   *  VEL       -- Actual velocity
-   *  ERR_OLD   -- Most recent recorded error signal
-   *
-   *  To be replaced, this is only here so that code compiles.
-   */
-//  float REF_POS[6];
-//  float POS[6];
-//  float ERR_OLD[6];
-//  float VEL[6];
+/*
+ *  sp_setPID(k_P, k_I, k_D)
+ * 
+ *  Manually change the PID coefficients
+ */
+void sp_setPID(float kP, float kI, float kD) {
+  k_P = kP;
+  k_I = kI;
+  k_D = kD;
 
   #ifdef DEBUG_PID
     // optional debug routine for PID
     debugPID(k_P, k_I, k_D);
   #endif
-
-  // PID action for each leg
-  for (int i = 0; i < 6; i++) {
-    // current error term
-    legLengthRef[i] -= legLength[i];
-
-    // integral error term
-    legError[i] += legLengthRef[i];
-
-    // derivative term
-    getVel();
-
-    // new position +=    proportional * error
-    //                  + integral gain * integral error
-    //                  - derivative gain * derivative (velocity)
-    legLength[i] +=   k_P*legLengthRef[i] 
-                    + k_I*legError[i] 
-                    - k_D*legVelocity[i];
-  }
 }
 
 /*
+ *  sp_PID()
  *
- *  calculat the velocity vector for PID
+ *  Stewart Platform PID Controller method which applies a PID controller
+ *  to each individual leg in order to help it achieve it's optimal position
  */
-void getVel() {
+void sp_PID() {
+  // grab whatever the current system time is.
+  currentTime = millis();
+  float dT = (float)(lastTime - currentTime);
+
+  // for each leg
   for (int i = 0; i < 6; i++) {
-    legVelocity[i] = legLength2[i] - legLength3[i];
+    // calculate the proportional error
+    float pErr = legRef[i] - legLength[i];
+
+    // Calculate integral error:
+    // we are multiplying by k_I immediately to ensure that there 
+    // are no problems if k_I changes while the program is running.
+    errSum[i] += k_I*pErr*dT;
+
+    // Calculate the derivative error:
+    float dErr = k_D * ((pErr - lastErr[i]) / dT);
+
+    // Compute the PID output
+    legVel[i] =   k_P*pErr 
+                + errSum[i]
+                + k_D*dErr;    
+
+    // Store some values for next time
+    lastErr[i] = pErr;
+    lastTime = currentTime;
   }
 }
+
 
 /*
  *  calcOrientation()
@@ -860,7 +868,7 @@ void calcLegLengths() {
      */
 
     // calculate and store the magnitude for each respective leg
-    legLengthRef[i] = calcVecMag(tempOut);
+    legRef[i] = calcVecMag(tempOut);
   }
 
   #ifdef DEBUG_LEGS
@@ -1145,7 +1153,6 @@ void readGyro() {
     imu.readAccel();
 }
 
-
 #ifdef DEBUG
 
   /*
@@ -1272,5 +1279,4 @@ void readGyro() {
   }
 
 #endif
-
 
