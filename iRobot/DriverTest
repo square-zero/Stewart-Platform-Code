@@ -305,6 +305,11 @@ class TetheredDriveApp(Tk):
             elif k == 'G': #this is the key for doing the wavefront path planning
                 self.getWavefrontDriver()
                 time.sleep(1)#pause?
+                # HERE IS THE CODE TO HAVE THE ROBOT REVERSE DIRECTION TO CORRECT AT THE END
+                # JANKYCITY
+                self.sendCommandASCII('137 255 110 170 80 00') #command to drive in reverse to correct...hacky
+		        time.sleep(3)#pause?
+		        # CODE ADDED BY RYAN ENDS HERE
                 self.sendCommandASCII('137 00 00 00 00') #stop
             elif k == 'Q':#drive in a square
                 self.sendCommandASCII('137 00 168 80 00') #drive: forward
