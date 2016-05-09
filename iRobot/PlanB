@@ -1,0 +1,542 @@
+'''
+Created on Apr 19, 2016
+
+
+This is the code for adaptive mapping
+Wavefront algo is run and at each step robot asks if there is a new object introduced or not
+
+
+@author: cosy16
+'''
+'''
+FOR RYAN####################################################################################!!!!!!!!
+1. for the arduino library I use put the SharpIR folder from git into the libraries folder in ubuntu: in gits its in the adaptive mapping folder
+under iRobot
+2. Make sure the DIstanceSensor.ino can run in your arduino environment first: in the lab just plug in the usb to your computer
+from the arduino uno: compile and verify and open the serial monitor in the upper right hand corner of the arduino IDE to make sure its 
+getting data correctly
+'''
+
+from Tkinter import *
+import tkMessageBox
+import tkSimpleDialog
+import time
+import serial
+from time import sleep
+from copy import copy, deepcopy
+
+import struct
+import sys, glob # for listing serial ports
+
+try:
+    import serial
+except ImportError:
+    tkMessageBox.showerror('Import error', 'Please install pyserial.')
+    raise
+
+connection = None
+
+#import for Wavefront
+from Wavefront import waveFrontPlanner
+
+TEXTWIDTH = 40 # window width, in characters
+TEXTHEIGHT = 16 # window height, in lines
+
+VELOCITYCHANGE = 200
+ROTATIONCHANGE = 300
+
+helpText = """\
+Supported Keys:
+P\tPassive
+S\tSafe
+F\tFull
+C\tClean
+D\tDock
+R\tReset
+Q\tDrive in a square
+Space\tBeep
+Arrows\tMotion
+If nothing happens after you connect, try pressing 'P' and then 'S' to get into safe mode.
+"""
+
+class TetheredDriveApp(Tk):
+    # static variables for keyboard callback -- I know, this is icky
+    callbackKeyUp = False
+    callbackKeyDown = False
+    callbackKeyLeft = False
+    callbackKeyRight = False
+    callbackKeyLastDriveCommand = ''
+
+    def __init__(self):
+        Tk.__init__(self) #tkinter is basically just a gui for the window and stuff
+        self.title("iRobot Create 2 Tethered Drive")
+        self.option_add('*tearOff', FALSE)
+
+        self.menubar = Menu()
+        self.configure(menu=self.menubar)
+
+        createMenu = Menu(self.menubar, tearoff=False)
+        self.menubar.add_cascade(label="Create", menu=createMenu)
+
+        createMenu.add_command(label="Connect", command=self.onConnect)
+        createMenu.add_command(label="Help", command=self.onHelp)
+        createMenu.add_command(label="Quit", command=self.onQuit)
+
+        self.text = Text(self, height = TEXTHEIGHT, width = TEXTWIDTH, wrap = WORD)
+        self.scroll = Scrollbar(self, command=self.text.yview)
+        self.text.configure(yscrollcommand=self.scroll.set)
+        self.text.pack(side=LEFT, fill=BOTH, expand=True)
+        self.scroll.pack(side=RIGHT, fill=Y)
+
+        self.text.insert(END, helpText)
+
+        self.bind("<Key>", self.callbackKey)
+        self.bind("<KeyRelease>", self.callbackKey)
+
+    # sendCommandASCII takes a string of whitespace-separated, ASCII-encoded base 10 values to send
+    def sendCommandASCII(self, command):
+        cmd = ""
+        for v in command.split():
+            cmd += chr(int(v))
+
+        self.sendCommandRaw(cmd)
+
+    # sendCommandRaw takes a string interpreted as a byte array
+    def sendCommandRaw(self, command):
+        global connection
+
+        try:
+            if connection is not None:
+                connection.write(command)
+            else:
+                tkMessageBox.showerror('Not connected!', 'Not connected to a robot!')
+                print "Not connected."
+        except serial.SerialException:
+            print "Lost connection"
+            tkMessageBox.showinfo('Uh-oh', "Lost connection to the robot!")
+            connection = None
+
+        print ' '.join([ str(ord(c)) for c in command ])
+        self.text.insert(END, ' '.join([ str(ord(c)) for c in command ]))
+        self.text.insert(END, '\n')
+        self.text.see(END)
+
+    # getDecodedBytes returns a n-byte value decoded using a format string.
+    # Whether it blocks is based on how the connection was set up.
+    def getDecodedBytes(self, n, fmt):
+        global connection
+        
+        try:
+            return struct.unpack(fmt, connection.read(n))[0]
+        except serial.SerialException:
+            print "Lost connection"
+            tkMessageBox.showinfo('Uh-oh', "Lost connection to the robot!")
+            connection = None
+            return None
+        except struct.error:
+            print "Got unexpected data from serial port."
+            return None
+
+    
+    #This is the recursive adapting mapping function that recursively recomputes the wavefront algo until
+    #a valid path is found 
+    #Parameters
+    #robotPosX = input of robot's current x coordinate position: int
+    #robotPosY = input of robot's current y coordinate position: int
+    #goalX = input of the robot's goal x coordinate position: int
+    #goalY = input of the robot's goal y coordinate position: int
+    #floorMap = input the modified grid of the room the robot will traverse (can be modified as obstacles are found): matrix ints
+    #compass = input the direction of the robot: default is usually "South": string
+    #origfloorMap = input the original grid of the room robot will traverse (need to keep track to "erase temp objects")
+    #return nothing
+    def adaptiveMapping(self, robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap):
+        if robotPosX == goalX and robotPosY == goalY:
+            print "Destination found"
+        else:
+            planner = waveFrontPlanner(floorMap, False)
+            planner.__goal_x = goalX
+            planner.__goal_y = goalY
+            planner.__robot_x = robotPosX
+            planner.__robot_y = robotPosY
+            path = planner.run(True)
+            if path is None:
+                #try to find path erasing all the temp obstacles!
+                floorMap = origFloorMap #we need to assign the origFloorMap to floorMap var
+                planner = waveFrontPlanner(origFloorMap, False)
+                path = planner.run(True)
+                if path is None:
+                    print "I give up! There is no path GAHHHHHH"
+                    return
+            triTuple = self.tryDrive(robotPosX, robotPosY, goalX, goalY, floorMap, path, compass)
+            #ther is just one path: we wait until temp obstacle goes away!
+    
+    #This is the method that determines if there is an obstacle in front of the robot or not 
+    #Accepts no params but returns a boolean
+    #True: if there is an obstacle in front
+    #False: if there is no obstacle in front of robot
+    #does this by making an array of read serial bits and then splititng on "." to get the numbers
+    #takes the middle elements in array not corrupted and averages the 3 to get the value 
+    def isThereObstacle(self):
+        usbPort = '/dev/ttyACM0'
+        ser = serial.Serial(usbPort, baudrate = 9600)
+        
+        sum1 = 0.0
+        sum2 = 0.0
+        n = 100
+        print "Check to see if there is an obstacle now!!!"
+        for _ in range(n):
+            num1 = ser.readline()
+            temp1 = ''.join(c for c in str(num1) if c.isdigit())
+            while temp1 == '':
+                num1 = ser.readline()
+                temp1 = ''.join(c for c in str(num1) if c.isdigit())
+            num2 = ser.readline()
+            temp2 = ''.join(c for c in str(num2) if c.isdigit())
+            while temp2 == '':
+                num2 = ser.readline()
+                temp2 = ''.join(c for c in str(num2) if c.isdigit())     
+            sum1 += int(temp1)
+            sum2 += int(temp2)
+        final1 = sum1/n
+        final2 = sum2/n  
+        print "final is is: " + str(final1)
+        print "final 2 is: " + str(final2)
+        if final1 < 0 or final2 < 0:
+            return False
+        if final1 < 30 or final2 < 30:
+            self.sendCommandASCII('137 00 00 00 00') #stopppp
+            return True
+        return False
+    
+    #this is actually the drive module that actually sends command to the robot: before the robot moves forward,
+    #the sensors will check to see if there is an obstacle
+    #if there is one, the current location of the robot is returned as well as its orientation so the wavefront algo
+    #can be run again
+    #Parameters
+    #robotPosX = input of robot's current x coordinate position: int
+    #robotPosY = input of robot's current y coordinate position: int
+    #goalX = input of the robot's goal x coordinate position: int
+    #goalY = input of the robot's goal y coordinate position: int
+    #floorMap = input the grid of the room the robot will traverse (can be modified as obstacles are found): matrix ints
+    #compass = input the direction of the robot: default is usually "South": string 
+    #robotPosX, robotPosY, goalX, goalY, floorMap, path, compass
+    def tryDrive(self, robotPosX, robotPosY, goalX, goalY, floorMap, path, compass):
+        
+        #compass = "South" #what direction is it facing
+        prevX = robotPosX
+        prevY = robotPosY
+        print "I started at: " + str(prevX) + "," + str(prevY)
+        for listXYs in path:
+            currX = listXYs[0]
+            currY = listXYs[1]
+            print "Going to: " + str(currX) + "," + str(currY)
+            
+            #There are four cases of places you could go
+            
+            #GOING NORTH
+            if (prevX - 1 == currX):
+                #need to check if there is something in square
+                
+                if compass == "South":
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "East":
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "West":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "North"
+            #GOING SOUTH
+            elif (prevX + 1 == currX):
+                if compass == "North":
+                    #want to rotate 180 degrees
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "East":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "West":
+                    self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "South"
+            #GOING WEST
+            elif (prevY - 1 == currY):
+                if compass == "South":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "North":
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "East":
+                    #want to rotate 180 degrees
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "West"
+            #GOING EAST   
+            elif (prevY + 1 == currY):
+                if compass == "South":
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "North":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "West":
+                    #want to rotate 180 degrees
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 00 01') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "East"
+            self.sendCommandASCII('137 00 00 00 00') #stopppp
+            #check if you can drive forward
+            if self.isThereObstacle():
+                #tell the robot to stop cuz you gon hit somethin...
+                if compass == "East":
+                    floorMap[prevX][prevY + 1] = 999 #mark as obstacle
+                elif compass == "West":
+                    floorMap[prevX][prevY - 1] = 999 #mark as obstacle
+                elif compass == "North":
+                    floorMap[prevX - 1][prevY] = 999 #mark as obstacle
+                elif compass == "South":
+                    floorMap[prevX + 1][prevY] = 999 #mark as obstacle  
+                return prevX, prevY, compass #return the current robot's location and compass
+           
+            '''
+            RYAN'S EDITS: tuning the forward command so it is exactly one square length
+            '''
+            #after each iteration wanna drive forward
+            self.sendCommandASCII('137 00 148 80 00') #drive: forward
+            time.sleep(1)#pause
+            self.sendCommandASCII('137 00 188 80 00') #drive
+            time.sleep(1)#pause 
+            
+            #update the prev to the currX     
+            prevX = currX
+            prevY = currY
+    
+    #this is the debug version with no ascii commands for robot for debugging purposes 
+    #robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap   
+    def tryDriveDebug(self, robotPosX, robotPosY, goalX, goalY, floorMap, path, compass):
+        
+        #compass = "South" #what direction is it facing
+        prevX = robotPosX
+        prevY = robotPosY
+        print "I started at: " + str(prevX) + "," + str(prevY)
+        for listXYs in path:
+            currX = listXYs[0]
+            currY = listXYs[1]
+            print "Going to: " + str(currX) + "," + str(currY)
+            
+            #There are four cases of places you could go
+            
+            #GOING NORTH
+            if (prevX - 1 == currX):
+                #need to check if there is something in square
+                
+                if compass == "South":
+                    print "Turn counterclockwise 90"
+                    print "Turn counterclockwise 90"
+                elif compass == "East":
+                    print "Turn counterclockwise 90"
+                elif compass == "West":
+                    print "Turn clockwise 90"
+                compass = "North"
+            #GOING SOUTH
+            elif (prevX + 1 == currX):
+                if compass == "North":
+                    print "Turn counterclockwise 90"
+                    print "Turn counterclockwise 90"
+                elif compass == "East":
+                    print "Turn clockwise 90"
+                elif compass == "West":
+                    print "Turn counterclockwise 90"
+                compass = "South"
+            #GOING WEST
+            elif (prevY - 1 == currY):
+                if compass == "South":
+                    print "Turn clockwise 90"
+                elif compass == "North":
+                    print "Turn counterclockwise 90"
+                elif compass == "East":
+                    #want to rotate 180 degrees
+                    print "Turn counterclockwise 90"
+                    print "Turn counterclockwise 90"
+                compass = "West"
+            #GOING EAST   
+            elif (prevY + 1 == currY):
+                if compass == "South":
+                    print "Turn counterclockwise 90"
+                elif compass == "North":
+                    print "Turn clockwise 90"
+                elif compass == "West":
+                    print "Turn counterclockwise 90"
+                    print "Turn counterclockwise 90"
+                compass = "East"
+            #INSTEAD OF THIS CODE!!! DO:THIS IS PSEUDOCODE
+            count = 0
+            while (there is obstacle in front of me):
+              if count ==0:
+                play: "Excuse me, could you get out of my way?"
+              elif count == 1:
+                play: "I really need to get through, can you let me through"
+              elif count == 2:
+                play: "I need to get through! Let me through!"
+              elif count == 3:
+                play "I'm starting to get angry"
+              elif count == 4:
+                play "OH MY GODDD! GET OOUT OF MY WAYYYY"
+              elif count == 5:
+                play "I quit...bartender come get me: I can't get through.."
+              count +=1
+            play "Thank you, I can get through now.."
+            '''
+            #check if you can drive forward
+            if self.isThereObstacle():
+                if compass == "East":
+                    floorMap[prevX][prevY + 1] = 999 #mark as obstacle
+                elif compass == "West":
+                    floorMap[prevX][prevY - 1] = 999 #mark as obstacle
+                elif compass == "North":
+                    floorMap[prevX - 1][prevY] = 999 #mark as obstacle
+                elif compass == "South":
+                    floorMap[prevX + 1][prevY] = 999 #mark as obstacle  
+                return prevX, prevY, compass #return the current robot's location and compass
+           '''
+            '''
+            RYAN'S EDITS: tuning the forward command so it is exactly one square length
+            '''
+            #after each iteration wanna drive forward
+            print "go straight one square" 
+            
+            #update the prev to the currX     
+            prevX = currX
+            prevY = currY
+            
+            #return None
+    
+    #This is the main call for the adaptive mapping module: we call this from a key press
+    #The params in this method can be tuned to take in a different floormap, start and goal state
+    def runAdaptiveMapping(self):
+        print "Getting floor map"
+        floormap1 = [[000,000,000],\
+                    [000,000,000], \
+                    [000,000,000], \
+                    [000,000,000], \
+                    [000,000,000]]
+        print "Processing floor map..."  
+        self.adaptiveMapping(0, 0, 4, 2, deepcopy(floormap1), "South", deepcopy(floormap1))  
+            
+    # A handler for keyboard events. Feel free to add more!
+    def callbackKey(self, event):
+        k = event.keysym.upper()
+        motionChange = False
+
+        if event.type == '2': # KeyPress; need to figure out how to get constant
+            if k == 'P':   # Passive
+                self.sendCommandASCII('128')
+            elif k == 'G': #this is the key for doing the wavefront path planning
+                app.runAdaptiveMapping()
+                self.sendCommandASCII('137 00 00 00 00') #stop
+                print "Done YESHHH"
+            elif k == 'A':
+                self.runAdaptiveMapping()
+                self.sendCommandASCII('137 00 00 00 00') #stop
+            elif k == 'S': # Safe
+                self.sendCommandASCII('131')
+            elif k == 'F': # Full
+                self.sendCommandASCII('132')
+            elif k == 'C': # Clean
+                self.sendCommandASCII('135')
+            elif k == 'D': # Dock
+                self.sendCommandASCII('143')
+            elif k == 'SPACE': # Beep
+                self.sendCommandASCII('140 3 1 64 16 141 3')
+            elif k == 'R': # Reset
+                self.sendCommandASCII('7')
+            elif k == 'UP':
+                self.callbackKeyUp = True
+                motionChange = True
+            elif k == 'DOWN':
+                self.callbackKeyDown = True
+                motionChange = True
+            elif k == 'LEFT':
+                self.callbackKeyLeft = True
+                motionChange = True
+            elif k == 'RIGHT':
+                self.callbackKeyRight = True
+                motionChange = True
+            elif k == 'R': #drive in a circle, reverse velocity -200 w/ r=500mm
+                self.sendCommandASCII('137 255 56 1 244')
+            else:
+                print repr(k), "not handled"
+        elif event.type == '3': # KeyRelease; need to figure out how to get constant
+            if k == 'UP':
+                self.callbackKeyUp = False
+                motionChange = True
+            elif k == 'DOWN':
+                self.callbackKeyDown = False
+                motionChange = True
+            elif k == 'LEFT':
+                self.callbackKeyLeft = False
+                motionChange = True
+            elif k == 'RIGHT':
+                self.callbackKeyRight = False
+                motionChange = True
+            elif k == 'R':
+                self.sendCommandASCII('127 0 0 0 0') #theoretically stops driving?
+
+        if motionChange == True:
+            velocity = 0
+            velocity += VELOCITYCHANGE if self.callbackKeyUp is True else 0
+            velocity -= VELOCITYCHANGE if self.callbackKeyDown is True else 0
+            rotation = 0
+            rotation += ROTATIONCHANGE if self.callbackKeyLeft is True else 0
+            rotation -= ROTATIONCHANGE if self.callbackKeyRight is True else 0
+
+            # compute left and right wheel velocities
+            vr = velocity + (rotation/2)
+            vl = velocity - (rotation/2)
+
+            # create drive command
+            cmd = struct.pack(">Bhh", 145, vr, vl)
+            if cmd != self.callbackKeyLastDriveCommand:
+                self.sendCommandRaw(cmd)
+                self.callbackKeyLastDriveCommand = cmd
+
+    def onConnect(self):
+        global connection
+        if connection is not None:
+            tkMessageBox.showinfo('Oops', "You're already connected!")
+            return
+        port = "/dev/ttyUSB1"
+        print "Trying " + str(port) + "... "
+        try:
+            connection = serial.Serial(port, baudrate=115200, timeout=1)
+            print "Connected!"
+            tkMessageBox.showinfo('Connected', "Connection succeeded!")
+        except:
+            print "Failed."
+            tkMessageBox.showinfo('Failed', "Sorry, couldn't connect to " + str(port))
+
+
+    def onHelp(self):
+        tkMessageBox.showinfo('Help', helpText)
+
+    def onQuit(self):
+        if tkMessageBox.askyesno('Really?', 'Are you sure you want to quit?'):
+            self.destroy()
+  
+
+if __name__ == "__main__":
+    
+    app = TetheredDriveApp() #initializes the object
+    app.mainloop()
+    
+    #app.runAdaptiveMapping() #run the adaptive mapping module
