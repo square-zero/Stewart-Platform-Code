@@ -1,0 +1,24 @@
+# Ryan Cysewski
+# EE 449
+# To install pygame, copy and paste the following into your terminal:
+# "sudo apt-get install python-pygame"
+
+import pygame
+pygame.init()
+import time
+
+obstacle = True
+
+if obstacle is True:
+    # Type the name of the audio file you wish to play below
+    pygame.mixer.music.load("ExcuseMe.mp3")
+    pygame.mixer.music.play()
+    time.sleep(5)
+    
+    pygame.mixer.music.load("DrinkArrived.mp3")
+    pygame.mixer.music.play()
+    time.sleep(3)
+    
+    pygame.mixer.music.load("YouWelcome.mp3")
+    pygame.mixer.music.play()
+    time.sleep(2)
