@@ -8,7 +8,8 @@ Wavefront algo is run and at each step robot asks if there is a new object intro
 
 @author: cosy16
 '''
-
+import pygame #for the sound ability
+pygame.init() #for the initialization of pygame
 from Tkinter import *
 import tkMessageBox
 import tkSimpleDialog
@@ -146,11 +147,10 @@ class TetheredDriveApp(Tk):
             print "Destination found"
         else:
             planner = waveFrontPlanner(floorMap, False)
-            planner.__goal_x = goalX
-            planner.__goal_y = goalY
-            planner.__robot_x = robotPosX
-            planner.__robot_y = robotPosY
+            planner.setRobotPosition(robotPosX, robotPosY)
+            planner.setGoalPosition(goalX, goalY)
             path = planner.run(True)
+            print path
             if path is None:
                 #try to find path erasing all the temp obstacles!
                 floorMap = origFloorMap #we need to assign the origFloorMap to floorMap var
@@ -164,6 +164,10 @@ class TetheredDriveApp(Tk):
                 robotPosX = triTuple[0]
                 robotPosY = triTuple[1]
                 compass = triTuple[2]
+                #tried to find another path
+                pygame.mixer.music.load("ExcuseMe.mp3")
+                pygame.mixer.music.play()
+                time.sleep(5)
                 self.adaptiveMapping(robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap) #recursively call itself
     
     #This is the method that determines if there is an obstacle in front of the robot or not 
@@ -173,12 +177,17 @@ class TetheredDriveApp(Tk):
     #does this by making an array of read serial bits and then splititng on "." to get the numbers
     #takes the middle elements in array not corrupted and averages the 3 to get the value 
     def isThereObstacle(self):
-        usbPort = '/dev/ttyACM0'
-        ser = serial.Serial(usbPort, baudrate = 9600)
+        ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
+        for usbPort in ports:
+            try:
+                ser = serial.Serial(usbPort, baudrate = 9600)
+                print "The port: " + usbPort + "succeeded!"
+            except:
+                print "The port: " + usbPort + " did not work!"
         
         sum1 = 0.0
         sum2 = 0.0
-        n = 100
+        n = 35
         print "Check to see if there is an obstacle now!!!"
         for _ in range(n):
             num1 = ser.readline()
@@ -198,10 +207,12 @@ class TetheredDriveApp(Tk):
         print "final is is: " + str(final1)
         print "final 2 is: " + str(final2)
         if final1 < 0 or final2 < 0:
+            print "There is no obstacle."
             return False
-        if final1 < 30 or final2 < 30:
-            self.sendCommandASCII('137 00 00 00 00') #stopppp
+        if final1 < 34 or final2 < 34:
+            print "There is obstacle."
             return True
+        print "There is no obstacle."
         return False
     
     #this is actually the drive module that actually sends command to the robot: before the robot moves forward,
@@ -302,6 +313,9 @@ class TetheredDriveApp(Tk):
                     floorMap[prevX - 1][prevY] = 999 #mark as obstacle
                 elif compass == "South":
                     floorMap[prevX + 1][prevY] = 999 #mark as obstacle  
+                print prevX
+                print prevY
+                print compass
                 return prevX, prevY, compass #return the current robot's location and compass
            
             '''
@@ -316,6 +330,9 @@ class TetheredDriveApp(Tk):
             #update the prev to the currX     
             prevX = currX
             prevY = currY
+            print "We update x and Y of robot curr pos"
+            print prevX
+            print prevY
     
     #this is the debug version with no ascii commands for robot for debugging purposes 
     #robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap   
@@ -385,7 +402,10 @@ class TetheredDriveApp(Tk):
                 elif compass == "North":
                     floorMap[prevX - 1][prevY] = 999 #mark as obstacle
                 elif compass == "South":
-                    floorMap[prevX + 1][prevY] = 999 #mark as obstacle  
+                    floorMap[prevX + 1][prevY] = 999 #mark as obstacle
+                print "This is the x" + str(prevX)
+                print "This is the y" + str(prevY )
+                print compass
                 return prevX, prevY, compass #return the current robot's location and compass
            
             '''
@@ -404,13 +424,13 @@ class TetheredDriveApp(Tk):
     #The params in this method can be tuned to take in a different floormap, start and goal state
     def runAdaptiveMapping(self):
         print "Getting floor map"
-        floormap1 = [[000,000,000],\
-                    [000,000,000], \
-                    [000,000,000], \
-                    [000,000,000], \
-                    [000,000,000]]
+        floormap1 = [[000,000,000], \
+                [000,000,000], \
+                [000,000,000], \
+                [000,000,000], \
+                [000,000,000]]
         print "Processing floor map..."  
-        self.adaptiveMapping(0, 0, 4, 2, deepcopy(floormap1), "South", deepcopy(floormap1))  
+        self.adaptiveMapping(0, 0, 4, 1, deepcopy(floormap1), "South", deepcopy(floormap1))  
             
     # A handler for keyboard events. Feel free to add more!
     def callbackKey(self, event):
@@ -423,7 +443,29 @@ class TetheredDriveApp(Tk):
             elif k == 'G': #this is the key for doing the wavefront path planning
                 app.runAdaptiveMapping()
                 self.sendCommandASCII('137 00 00 00 00') #stop
-                print "Done YESHHH"
+                pygame.mixer.music.load("DrinkArrived.mp3")
+                pygame.mixer.music.play()
+                time.sleep(3)
+                print "PATH COMPLETED!"
+                time.sleep(3)
+                pygame.mixer.music.load("YouWelcome.mp3")
+                pygame.mixer.music.play()
+                time.sleep(2)
+            elif k == 'L':
+                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                time.sleep(1) #pause for 90degree turn
+                self.sendCommandASCII('137 00 00 00 00') #stop
+                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                time.sleep(1) #pause for 90degree turn
+                self.sendCommandASCII('137 00 00 00 00') #stop
+            elif k == 'R':
+                #time.sleep(1) #pause for 90degree turn
+                self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                time.sleep(1)
+                self.sendCommandASCII('137 00 00 00 00') #stop
+                self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                time.sleep(1)
+                self.sendCommandASCII('137 00 00 00 00') #stop
             elif k == 'A':
                 self.runAdaptiveMapping()
                 self.sendCommandASCII('137 00 00 00 00') #stop
@@ -494,6 +536,7 @@ class TetheredDriveApp(Tk):
         if connection is not None:
             tkMessageBox.showinfo('Oops', "You're already connected!")
             return
+        ports = ["/dev/ttyS0", "/dev/ttyACM0", "/dev/ttyUSB0"]
         port = "/dev/ttyUSB1"
         print "Trying " + str(port) + "... "
         try:
