@@ -92,10 +92,8 @@
  *  
  */
 
-// I2C Addresses
-// SDO_XM and SDO_G are both pulled high, so our addresses are:
-#define MMA_A_ADDRESS 0x1C
-#define MMA_B_ADDRESS 0x1D
+// I2C Address
+#define MMA_A_ADDRESS 0x1D
 
 /*
  *  MATH CONSTANTS
@@ -690,10 +688,17 @@ void calcRMat(float orientation[]) {
  *  platRMat[9]   -- Updates platRMat[] using calculated orientation
  */
 void calcOrientation() {
+  float temp[3];
+  float tempRotate[] = {0, 0, pi/3};
+
   // Read acceleration from Gyroscope
+  // NOTE:
+  // X- and Y-values are switched. This is because of the geometry of our platform
+  // (( Lucas accidentally put the gyroscope on in the wrong way ))
+  // (( this is a clever/hacky work-around ))
   readMMA_A();
-  accel[0] = mma_a.x + ACCEL_OFFSET[0];
-  accel[1] = mma_a.y + ACCEL_OFFSET[1];
+  accel[0] = mma_a.y + ACCEL_OFFSET[0];
+  accel[1] = mma_a.x + ACCEL_OFFSET[1];
   accel[2] = mma_a.z + ACCEL_OFFSET[2];
 
   // Normalize the acceleration vector
@@ -712,25 +717,25 @@ void calcOrientation() {
    *  we can transform it's pitch and yaw into roll and pitch for the platform
    */
 
+
   // PLATFORM ROLL  --- NORM YAW
     orientation_ref[0] = asin(-unit[1]);
+    //orientation_ref[0] = atan2(unit[0], unit[2]);
 
     // PLATFORM PITCH --- NORM ROLL
     orientation_ref[1] = atan2(unit[0], unit[2]);
+    //orientation_ref[1] = asin(-unit[1]);
 
     // PLATFORM YAW   --- NORM PITCH
     // platform YAW is immaterial. This value can theoretically be set to anything
     // but to minimize the risk of problems, we'll leave it at zero for now.
     orientation_ref[2] = 0;
 
-  // automatically implied w/ PID (negative feedback)
-  #ifndef PID_TILT
     // NEGATE ORIENTATION
     // This will cause platform to rotate towards center
     for (int i = 0; i < 3; i++) {
       orientation_ref[i] = -orientation_ref[i];
     }
-  #endif
   
     // MAXIMUM TILT CONDITION
     for (int i = 0; i < 3; i++) {
@@ -1094,25 +1099,12 @@ void tilt_PID() {
     vRef = orientation_ref[i];
     vAct = orientation_actual[i];
 
-    if (i == 0) {
-      Serial.println("Roll (X-axis)");
-    } else {
-      Serial.println("Pitch (Y-axis)");
-    }
-    Serial.println("vRef = " + (String)(vRef));
-    Serial.println("vAct = " + (String)(vAct));
-
     // Error values for i-axis
     err_t =         (vRef - vAct);
     pErr_t =        k_P_tilt*err_t;
     iErr_t[i] +=    k_I_tilt*err_t*dT;
     dErr_t =        k_D_tilt * (pErr_t - lastErr_t[i]) / dT;
     lastErr_t[i] =  err_t;
-
-    Serial.println("pErr = " + (String)(pErr_t));
-    Serial.println("iErr = " + (String)(iErr_t[i]));
-    Serial.println("dErr = " + (String)(dErr_t));
-    Serial.println("lastErr = " + (String)(lastErr_t[i]));
     
     // Adjust theta if value is too large (faster than servos)
     errSum = pErr_t + iErr_t[i] + dErr_t;
@@ -1245,7 +1237,6 @@ void printMat(float mat[], int size, String name) {
   Serial.begin(SERIAL_BAUD);
 
   mma_a = Adafruit_MMA8451();
-  mma_b = Adafruit_MMA8451(); 
 
   /*
    * Activate MMA's and confirm correct wiring
@@ -1258,10 +1249,6 @@ void printMat(float mat[], int size, String name) {
   } else {
     Serial.println("MMA_A OK");
   }
-  if (!mma_b.begin(MMA_B_ADDRESS)) {
-    //Serial.println("MMA B failed to communicate.");
-    //Serial.println("Double-check wiring.");
-  }
 
   /*
    *  MMA Setting Constants
@@ -1272,12 +1259,10 @@ void printMat(float mat[], int size, String name) {
   
   uint8_t CTRL_REG1 = 0x2A;
   uint8_t CTRL_REG1_A_DATA = mma_a.readRegister8(CTRL_REG1);
-  uint8_t CTRL_REG1_B_DATA = mma_b.readRegister8(CTRL_REG1);
   uint8_t CTRL_REG1_LNOISE = 0x05;
 
   uint8_t CTRL_REG2 = 0x2B;
   uint8_t CTRL_REG2_A_DATA = mma_a.readRegister8(CTRL_REG2);
-  uint8_t CTRL_REG2_B_DATA = mma_b.readRegister8(CTRL_REG2);
   uint8_t CTRL_REG2_MODS = 0x02;
 
   /*
@@ -1293,20 +1278,6 @@ void printMat(float mat[], int size, String name) {
   mma_a.writeRegister8(CTRL_REG2, CTRL_REG2_A_DATA | CTRL_REG2_MODS);
   // Configure FIFO for sample averaging w/ circular buffer
   //mma_a.writeRegister8(F_SETUP, FIFO_MODE_CIRCULAR_BUFFER + FIFO_WTMK_COUNT);
-
-  /*
-   * MMA_B Settings
-   */
-  // Set sensitivity to +-2G
-  mma_b.setRange(MMA8451_RANGE_2_G);
-  // Set data rate to very high
-  mma_b.setDataRate(MMA8451_DATARATE_50_HZ);
-  // Reduced-noise operation
-  mma_b.writeRegister8(CTRL_REG1, CTRL_REG1_A_DATA | CTRL_REG1_LNOISE);
-  // Oversampling
-  mma_b.writeRegister8(CTRL_REG2, CTRL_REG2_B_DATA | CTRL_REG2_MODS);
-  // Configure FIFO for sample averaging w/ circular buffer
-  //mma_b.writeRegister8(F_SETUP, FIFO_MODE_CIRCULAR_BUFFER + FIFO_WTMK_COUNT);
 }
 
 /*
@@ -1317,16 +1288,6 @@ void printMat(float mat[], int size, String name) {
 void readMMA_A() {
     // read the acceleration values from the gyroscope
     mma_a.read();
-}
-
-/*
- *  readMMA_B()
- *
- *  reads from MMA_B
- */
-void readMMA_B() {
-    // read the acceleration values from the gyroscope
-    mma_b.read();
 }
 
 #ifdef DEBUG
@@ -1429,4 +1390,5 @@ void readMMA_B() {
   }
 
 #endif
+
 
