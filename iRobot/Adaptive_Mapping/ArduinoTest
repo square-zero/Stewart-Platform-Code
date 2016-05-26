@@ -6,12 +6,18 @@ Created on Apr 3, 2016
 from time import sleep
 ## import the serial library
 import serial
+import math
 
 ## Boolean variable that will represent 
 ## whether or not the arduino is connected
 connected = False
 
-## open the serial port that your ardiono 
+#These are the tune factors for the peripherals
+#For the peripherals that make sure width of robot doesn't hit anything the range = 47
+PERIPH = 49
+#For the inside sensors that detect objects right in front the range = 33
+INSIDE = 49
+## open the serial port that your arduino
 ## is connected to.s
 ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
 for usbPort in ports:
@@ -23,7 +29,9 @@ for usbPort in ports:
 
 sum1 = 0.0
 sum2 = 0.0
-n = 100
+sum3 = 0.0
+sum4 = 0.0
+n = 35
 print "Check to see if there is an obstacle now!!!"
 for _ in range(n):
     num1 = ser.readline()
@@ -36,17 +44,37 @@ for _ in range(n):
     while temp2 == '':
         num2 = ser.readline()
         temp2 = ''.join(c for c in str(num2) if c.isdigit()) 
-    print temp2
-    print temp2    
+    num3 = ser.readline()
+    temp3 = ''.join(c for c in str(num3) if c.isdigit())
+    while temp3 == '':
+        num3 = ser.readline()
+        temp3 = ''.join(c for c in str(num3) if c.isdigit()) 
+    num4 = ser.readline()
+    temp4 = ''.join(c for c in str(num4) if c.isdigit())
+    while temp4 == '':
+        num4 = ser.readline()
+        temp4 = ''.join(c for c in str(num4) if c.isdigit())
+    print temp1
+    print temp2 
+    print temp3
+    print temp4   
     sum1 += int(temp1)
     sum2 += int(temp2)
+    sum3 += int(temp3)
+    sum4 += int(temp4)
+
 final1 = sum1/n
-final2 = sum2/n  
-print "final is is: " + str(final1)
+final2 = sum2/n 
+final3 = sum3/n
+final4 = sum4/n
+
+print "final 1 is: " + str(final1)
 print "final 2 is: " + str(final2)
-if final1 < 0 or final2 < 0:
+print "final 3 is: " + str(final3)
+print "final 4 is: " + str(final4)
+if final1 < 0 or final2 < 0 or final3 < 0 or final4 < 0:
     print "no obstacle"
-if final1 < 33 or final2 < 33:
+if final1 < PERIPH or final2 < PERIPH or final3 < INSIDE or final4 < INSIDE: #these are the ones farther away: peripherals
     print "OBSCACLEEEE"
 else:
     print "No Obstacle"
