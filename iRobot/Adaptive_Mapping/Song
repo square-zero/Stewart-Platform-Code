@@ -22,3 +22,7 @@ if obstacle is True:
     pygame.mixer.music.load("YouWelcome.mp3")
     pygame.mixer.music.play()
     time.sleep(2)
+    
+    pygame.mixer.music.load("BartenderSaveMe.mp3")
+    pygame.mixer.music.play()
+    time.sleep(5)
