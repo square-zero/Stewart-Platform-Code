@@ -1,0 +1,65 @@
+'''
+Created on Apr 3, 2016
+
+@author: cosy16
+'''
+from time import sleep
+## import the serial library
+import serial
+import math
+
+## Boolean variable that will represent 
+## whether or not the arduino is connected
+connected = False
+
+#These are the tune factors for the peripherals
+#For the peripherals that make sure width of robot doesn't hit anything the range = 47
+PERIPH = 47
+#For the inside sensors that detect objects right in front the range = 33
+INSIDE = 47
+## open the serial port that your arduino
+## is connected to.s
+ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
+for usbPort in ports:
+    try:
+        ser = serial.Serial(usbPort, baudrate = 9600)
+        print "The port: " + usbPort + "succeeded!"
+    except:
+        print "The port: " + usbPort + " did not work!"
+
+sum1 = 0.0
+sum2 = 0.0
+
+n = 35
+print "Check to see if there is an obstacle now!!!"
+for _ in range(n):
+    num1 = ser.readline()
+    temp1 = ''.join(c for c in str(num1) if c.isdigit())
+    while temp1 == '':
+        num1 = ser.readline()
+        temp1 = ''.join(c for c in str(num1) if c.isdigit())
+    num2 = ser.readline()
+    temp2 = ''.join(c for c in str(num2) if c.isdigit())
+    while temp2 == '':
+        num2 = ser.readline()
+        temp2 = ''.join(c for c in str(num2) if c.isdigit()) 
+  
+    print temp1
+    print temp2    
+    sum1 += int(temp1)
+    sum2 += int(temp2)
+  
+
+final1 = sum1/n
+final2 = sum2/n 
+
+
+print "final 1 is: " + str(final1)
+print "final 2 is: " + str(final2)
+
+if final1 < 0 or final2 < 0:
+    print "no obstacle"
+if final1 < PERIPH or final2 < PERIPH: #these are the ones farther away: peripherals
+    print "OBSCACLEEEE"
+else:
+    print "No Obstacle"
