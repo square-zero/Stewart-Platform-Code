@@ -145,6 +145,7 @@ class TetheredDriveApp(Tk):
     def adaptiveMapping(self, robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap):
         if robotPosX == goalX and robotPosY == goalY:
             print "PATH COMPLETED! I got into base case"
+            #never get in here actually
         else:
             planner = waveFrontPlanner(floorMap, False)
             planner.setRobotPosition(robotPosX, robotPosY)
@@ -172,22 +173,6 @@ class TetheredDriveApp(Tk):
                 time.sleep(5)
                 self.adaptiveMapping(robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap) #recursively call itself
             print "PATH COMPLETED!"
-            print "This is the compass " + compass
-            #orient South for repetition roundtrips
-            if compass == "North":
-                #want to rotate 180 degrees
-                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
-                time.sleep(1) #pause for 90degree turn
-                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
-                time.sleep(1) #pause for 90degree turn
-            elif compass == "East":
-                self.sendCommandASCII('137 255 56 00 01') #turn clockwise
-                time.sleep(1) #pause for 90degree turn
-            elif compass == "West":
-                self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
-                time.sleep(1) #pause for 90degree turn
-            compass = "South"
-            self.sendCommandASCII('137 00 00 00 00') #stop
             return path
     
     #This is the method that determines if there is an obstacle in front of the robot or not 
@@ -216,7 +201,7 @@ class TetheredDriveApp(Tk):
         sum4 = 0.0
         
         #sleep for a minute so we can poll resl time values
-        time.sleep(5)
+        #time.sleep(5)
         n = 35
         print "Check to see if there is an obstacle now!!!"
         for _ in range(n):
@@ -381,9 +366,23 @@ class TetheredDriveApp(Tk):
             #update the prev to the currX     
             prevX = currX
             prevY = currY
-            print "We update x and Y of robot curr pos"
-            print prevX
-            print prevY
+            print compass
+            if prevX == goalX and prevY == goalY: #if we are at goal we need to reconfigure!!!
+                if compass == "North":
+                    #want to rotate 180 degrees
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "East":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "West":
+                    self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "South"
+                self.sendCommandASCII('137 00 00 00 00') #stop
+
     
     #this is the debug version with no ascii commands for robot for debugging purposes 
     #robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap   
