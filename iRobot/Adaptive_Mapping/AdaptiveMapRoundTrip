@@ -172,6 +172,21 @@ class TetheredDriveApp(Tk):
                 time.sleep(5)
                 self.adaptiveMapping(robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap) #recursively call itself
             print "PATH COMPLETED!"
+            print "This is the compass " + compass
+            #orient South for repetition roundtrips
+            if compass == "North":
+                #want to rotate 180 degrees
+                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                time.sleep(1) #pause for 90degree turn
+                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                time.sleep(1) #pause for 90degree turn
+            elif compass == "East":
+                self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                time.sleep(1) #pause for 90degree turn
+            elif compass == "West":
+                self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
+                time.sleep(1) #pause for 90degree turn
+            compass = "South"
             self.sendCommandASCII('137 00 00 00 00') #stop
             return path
     
