@@ -144,13 +144,12 @@ class TetheredDriveApp(Tk):
     #return nothing
     def adaptiveMapping(self, robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap):
         if robotPosX == goalX and robotPosY == goalY:
-            print "Destination found"
+            print "PATH COMPLETED! I got into base case"
         else:
             planner = waveFrontPlanner(floorMap, False)
             planner.setRobotPosition(robotPosX, robotPosY)
             planner.setGoalPosition(goalX, goalY)
             path = planner.run(True)
-            print path
             if path is None:
                 #try to find path erasing all the temp obstacles!
                 floorMap = origFloorMap #we need to assign the origFloorMap to floorMap var
@@ -158,7 +157,10 @@ class TetheredDriveApp(Tk):
                 path = planner.run(True)
                 if path is None:
                     print "I give up! There is no path GAHHHHHH"
-                    return
+                    pygame.mixer.music.load("BartenderSaveMe.mp3")
+                    pygame.mixer.music.play()
+                    time.sleep(5)
+                    return None
             triTuple = self.tryDrive(robotPosX, robotPosY, goalX, goalY, floorMap, path, compass)
             if triTuple is not None:
                 robotPosX = triTuple[0]
@@ -169,6 +171,9 @@ class TetheredDriveApp(Tk):
                 pygame.mixer.music.play()
                 time.sleep(5)
                 self.adaptiveMapping(robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap) #recursively call itself
+            print "PATH COMPLETED!"
+            self.sendCommandASCII('137 00 00 00 00') #stop
+            return path
     
     #This is the method that determines if there is an obstacle in front of the robot or not 
     #Accepts no params but returns a boolean
@@ -177,6 +182,11 @@ class TetheredDriveApp(Tk):
     #does this by making an array of read serial bits and then splititng on "." to get the numbers
     #takes the middle elements in array not corrupted and averages the 3 to get the value 
     def isThereObstacle(self):
+        #These are the tune factors for the peripherals
+        #For the peripherals that make sure width of robot doesn't hit anything the range = 47
+        PERIPH = 49
+        #For the inside sensors that detect objects right in front the range = 33
+        INSIDE = 49
         ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
         for usbPort in ports:
             try:
@@ -184,9 +194,14 @@ class TetheredDriveApp(Tk):
                 print "The port: " + usbPort + "succeeded!"
             except:
                 print "The port: " + usbPort + " did not work!"
-        
+        #These are the sums for each sensor
         sum1 = 0.0
         sum2 = 0.0
+        sum3 = 0.0
+        sum4 = 0.0
+        
+        #sleep for a minute so we can poll resl time values
+        time.sleep(5)
         n = 35
         print "Check to see if there is an obstacle now!!!"
         for _ in range(n):
@@ -199,21 +214,42 @@ class TetheredDriveApp(Tk):
             temp2 = ''.join(c for c in str(num2) if c.isdigit())
             while temp2 == '':
                 num2 = ser.readline()
-                temp2 = ''.join(c for c in str(num2) if c.isdigit())     
-            sum1 += int(temp1)
-            sum2 += int(temp2)
+                temp2 = ''.join(c for c in str(num2) if c.isdigit()) 
+            num3 = ser.readline()
+            temp3 = ''.join(c for c in str(num3) if c.isdigit())
+            while temp3 == '':
+                num3 = ser.readline()
+                temp3 = ''.join(c for c in str(num3) if c.isdigit()) 
+            num4 = ser.readline()
+            temp4 = ''.join(c for c in str(num4) if c.isdigit())
+            while temp4 == '':
+                num4 = ser.readline()
+                temp4 = ''.join(c for c in str(num4) if c.isdigit())
+            if int(temp1) >= 0: #make sure reading is not neg otherwise do not count
+                sum1 += int(temp1)
+            if int(temp2) >= 0:
+                sum2 += int(temp2)
+            if int(temp3) >= 0:
+                sum3 += int(temp3)
+            if int(temp4) >= 0:
+                sum4 += int(temp4)
+        #compute the averages after taking n samples
         final1 = sum1/n
-        final2 = sum2/n  
-        print "final is is: " + str(final1)
+        final2 = sum2/n 
+        final3 = sum3/n
+        final4 = sum4/n     
+           
+        print "final 1 is: " + str(final1)
         print "final 2 is: " + str(final2)
-        if final1 < 0 or final2 < 0:
-            print "There is no obstacle."
+        print "final 3 is: " + str(final3)
+        print "final 4 is: " + str(final4)
+        if final1 < 0 or final2 < 0 or final3 < 0 or final4 < 0:
+            print "no obstacle"
             return False
-        if final1 < 34 or final2 < 34:
-            print "There is obstacle."
+        if final1 < PERIPH or final2 < PERIPH or final3 < INSIDE or final4 < INSIDE: #these are the ones farther away: peripherals
+            print "OBSCACLEEEE"
             return True
-        print "There is no obstacle."
-        return False
+
     
     #this is actually the drive module that actually sends command to the robot: before the robot moves forward,
     #the sensors will check to see if there is an obstacle
@@ -430,7 +466,8 @@ class TetheredDriveApp(Tk):
                 [000,000,000], \
                 [000,000,000]]
         print "Processing floor map..."  
-        self.adaptiveMapping(0, 0, 4, 1, deepcopy(floormap1), "South", deepcopy(floormap1))  
+        path = self.adaptiveMapping(0, 0, 4, 1, deepcopy(floormap1), "South", deepcopy(floormap1))
+        return path
             
     # A handler for keyboard events. Feel free to add more!
     def callbackKey(self, event):
@@ -441,16 +478,17 @@ class TetheredDriveApp(Tk):
             if k == 'P':   # Passive
                 self.sendCommandASCII('128')
             elif k == 'G': #this is the key for doing the wavefront path planning
-                app.runAdaptiveMapping()
+                path = app.runAdaptiveMapping()
+                print path
+                if path is not None:
+                    self.sendCommandASCII('137 00 00 00 00') #stop
+                    pygame.mixer.music.load("DrinkArrived.mp3")
+                    pygame.mixer.music.play()
+                    time.sleep(6) #wait to say you're welcome
+                    pygame.mixer.music.load("YouWelcome.mp3")
+                    pygame.mixer.music.play()
+                    time.sleep(2)
                 self.sendCommandASCII('137 00 00 00 00') #stop
-                pygame.mixer.music.load("DrinkArrived.mp3")
-                pygame.mixer.music.play()
-                time.sleep(3)
-                print "PATH COMPLETED!"
-                time.sleep(3)
-                pygame.mixer.music.load("YouWelcome.mp3")
-                pygame.mixer.music.play()
-                time.sleep(2)
             elif k == 'L':
                 self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
                 time.sleep(1) #pause for 90degree turn
@@ -536,8 +574,18 @@ class TetheredDriveApp(Tk):
         if connection is not None:
             tkMessageBox.showinfo('Oops', "You're already connected!")
             return
-        ports = ["/dev/ttyS0", "/dev/ttyACM0", "/dev/ttyUSB0"]
-        port = "/dev/ttyUSB1"
+        port = "/dev/ttyUSB0"
+        ports = ['/dev/ttyUSB0', '/dev/ttyUSB1']
+        '''
+        for usbPort in ports:
+            try:
+                port = serial.Serial(usbPort, baudrate = 9600)
+                print "The port: " + usbPort + "succeeded!"
+            except:
+                print "The port: " + usbPort + " did not work!"
+        #These are the sums for each sensor
+        '''
+        
         print "Trying " + str(port) + "... "
         try:
             connection = serial.Serial(port, baudrate=115200, timeout=1)
