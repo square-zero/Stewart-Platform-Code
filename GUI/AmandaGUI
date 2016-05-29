@@ -1,0 +1,10 @@
+from Tkinter import *
+#change the dimensions for the surface!!!
+WIDTH = 1200
+HEIGHT = 950
+root = Tk() #Makes the window
+root.wm_title("Tipsy Engineers Incorporated") #Makes the title that will appear in the top left
+root.config(background = "black") #sets background color to white
+root.config(width = WIDTH, height = HEIGHT)
+root.resizable(width=FALSE, height=FALSE)
+root.mainloop()
