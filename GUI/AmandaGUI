@@ -75,14 +75,13 @@ class App:
             print "Call adaptive mapping code from bartender to customer"
             #pop up british image
             imageBritish = self.callBritishGuy()
-            '''
             self.robotDetails.Adap.runAdaptiveMappingToCustomer()
             self.robotDetails.posX = STARTX
             self.robotDetails.posY = STARTY
             self.robotDetails.endX = ENDX
             self.robotDetails.endY = ENDY
-            '''
-            #imageBritish.destroy()
+            #exit out of british guy image when you approach
+            imageBritish.destroy()
     
     #method that calls window to open drink menu       
     def place_order(self):
@@ -136,16 +135,52 @@ class App:
         time.sleep(6)
         #pop up british image
         imageBritish = self.callBritishGuy()
-        print "call adaptive mapping!!!"
-        '''
+        
+        #call adaptive mapping component!
+        print "call adaptive mapping to bartender"
         self.robotDetails.Adap.runAdaptiveMappingToBartender()
         self.robotDetails.posX = ENDX
         self.robotDetails.posY = ENDY
         self.robotDetails.endX = STARTX
         self.robotDetails.endY = STARTY
-        '''
-        #imageBritish.destroy()
         
+        #destroy british guy image before telling bartender what was ordered
+        imageBritish.destroy()
+        self.displayOrder(index)
+        
+    #displays the order that was received
+    def displayOrder(self, index):
+        order = Toplevel()
+        order.configure(background = "black")
+        order.title("Tipsy Engineers Incorporated")
+        newText = Text(order, width=50, height=8, takefocus=0)
+        newText.grid(row=0, column=0, padx=10, pady=2)
+        
+        #alert to the bartender what drink was ordered!!!
+        drink = AUDIO_CLIPS[index]
+        if drink == "Strawberry-Lemonade.mp3":
+            newText.insert(0.0, "Customer Ordered: Strawberry Lemonade")
+        elif drink == "Surprise.mp3":
+            newText.insert(0.0, "Customer Ordered: Surprise Drink")
+        elif drink == "Coca-Cola.mp3":
+            newText.insert(0.0, "Customer Ordered: Coca-cola")
+        elif drink == "Sprite.mp3":
+            newText.insert(0.0, "Customer Ordered: Sprite")
+        elif drink == "SparklingCider.mp3":
+            newText.insert(0.0, "Customer Ordered: Sparkling Cider")
+        elif drink == "Shirley-Temple.mp3":
+            newText.insert(0.0, "Customer Ordered: Shirley Temple")
+        elif drink == "Roy-Rogers.mp3":
+            newText.insert(0.0, "Customer Ordered: Roy Rogers")
+        elif drink == "DD.mp3":
+            newText.insert(0.0, "Customer Ordered: Designated Driver")
+        elif drink == "RootBeerFloat.mp3":
+            newText.insert(0.0, "Customer Ordered: Rootbeer Float")
+        elif drink == "Surprise.mp3":
+            newText.insert(0.0, "Customer Ordered: Surprise Drink")
+        elif drink == "ClubSodaandLime.mp3":
+            newText.insert(0.0, "Customer Ordered: CLub Soda and Lime")
+              
 root = Tk() #Makes the window
 root.wm_title("Tipsy Engineers Incorporated") #Makes the title that will appear in the top left
 root.config(background = "black") #sets background color to white
