@@ -154,6 +154,8 @@ class TetheredDriveApp(Tk):
             if path is None:
                 #try to find path erasing all the temp obstacles!
                 floorMap = origFloorMap #we need to assign the origFloorMap to floorMap var
+                planner.setRobotPosition(robotPosX, robotPosY)
+                planner.setGoalPosition(goalX, goalY)
                 planner = waveFrontPlanner(origFloorMap, False)
                 path = planner.run(True)
                 if path is None:
@@ -187,6 +189,8 @@ class TetheredDriveApp(Tk):
         PERIPH = 49
         #For the inside sensors that detect objects right in front the range = 33
         INSIDE = 49
+        #we need to wait a certain number of seconds so we can poll efficiently
+        time.sleep(5)
         ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
         for usbPort in ports:
             try:
@@ -200,8 +204,6 @@ class TetheredDriveApp(Tk):
         sum3 = 0.0
         sum4 = 0.0
         
-        #sleep for a minute so we can poll resl time values
-        #time.sleep(5)
         n = 35
         print "Check to see if there is an obstacle now!!!"
         for _ in range(n):
