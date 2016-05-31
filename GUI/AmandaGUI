@@ -1,83 +1,154 @@
 '''
 Created on May 29, 2016
 
-@author: cosy16
+@author: Amanda Loh
 '''
 from Tkinter import *
+from RobotDetails import RobotDetails
 import tkFont
+import tkMessageBox
+import pygame
+pygame.init()
+import time
+from AdaptiveMapping import AdaptiveMapping
 
+#CONSTANTS
+MAX_DRINKS = 2 #max drinks you can order at a time
+#audio clips for the bartender
+AUDIO_CLIPS = ['Strawberry-Lemonade.mp3', 'Surprise.mp3', 'Coca-Cola.mp3', 'Sprite.mp3',
+               'SparklingCider.mp3', 'Shirley-Temple.mp3', 'Roy-Rogers.mp3', 'DD.mp3', 
+               'RootBeerFloat.mp3', 'ClubSodaandLime.mp3']
+#initial starting configuration
+STARTX = 4
+STARTY = 2
+ENDX = 0
+ENDY = 0
 
+class App:
+    def __init__(self, master, robotDetails):
+        self.robotDetails = robotDetails
+        #Left Frame and its contents
+        leftFrame = Frame(root, width=200, height = 600)
+        leftFrame.grid(row=0, column=0, padx=10, pady=2)
+        leftFrame.config(background = "black")
+        try:
+            imageEx = PhotoImage(file ='cocktail.png')
+            Label(leftFrame, image=imageEx).grid(row=2, column=0, padx=10, pady=2)
+            imageEx.image = imageEx
+            imageEx.pack()
+            
+        except:
+            print("Image not found")
 
-def placeOrder():
-    helv24 = tkFont.Font(family='Helvetica',
-    size=24, weight='bold')
-    helv48 = tkFont.Font(family='Helvetica',
-    size=48, weight='bold')
-    top = Toplevel()
-    top.title("Tipsy Engineers, Inc.")
-
-    msg = Message(top, text="Drink Menu", font="helv48")
-    msg.grid(row=0, column=0, padx=150, pady=100)
-    top.wm_geometry("1200x920")
-
-    msg = Message(top)
-
-    drink1 = Button(top, text="Strawberry Lemonade", font=helv24,    command=top.destroy)
-    drink1.grid(row=1, column=1, pady=15)
-
-    drink2 = Button(top, text="Surprise Me!", font=helv24, command=top.destroy)
-    drink2.grid(row=2, column=1, pady=15)
-
-    drink3 = Button(top, text="Coca-Cola", font=helv24, command=top.destroy)
-    drink3.grid(row=3, column=1, pady=15)
-
-    drink4 = Button(top, text="Sprite", font=helv24, command=top.destroy)
-    drink4.grid(row=4, column=1, pady=15)
-
-    drink5 = Button(top, text="Sparkling Cider", font=helv24, command=top.destroy)
-    drink5.grid(row=5, column=1, pady=15)
-
-    drink6 = Button(top, text="Shirley Temple", font=helv24, command=top.destroy)
-    #drink1.pack(side=RIGHT)
-    drink6.grid(row=1, column=2, pady=15)
-
-    drink7 = Button(top, text="Roy Rogers", font=helv24, command=top.destroy)
-    drink7.grid(row=2, column=2, pady=15)
-
-    drink8 = Button(top, text="The DD", font=helv24, command=top.destroy)
-    drink8.grid(row=3, column=2, pady=15)
-
-    drink9 = Button(top, text="Root Beer Float", font=helv24, command=top.destroy)
-    drink9.grid(row=4, column=2, pady=15)
-
-    drink10 = Button(top, text="Club Soda and Lime", font=helv24, command=top.destroy)
-    drink10.grid(row=5, column=2, pady=15)
+        #Right Frame and its contents
+        rightFrame = Frame(root, width=200, height = 600)
+        rightFrame.grid(row=0, column=1, padx=10, pady=2)
+        rightFrame.config(background = "black")
+        #change the dimensions for the surface!!!
+        fontOrig = tkFont.Font(family='Helvetica', size = 20, weight = "bold")
+        orderDrinks = Button(rightFrame, text="Order Drinks", height = 9, width = 20, bg = "VioletRed4", font = fontOrig, command=self.place_order)
+        orderDrinks.grid(row=0, column=0, padx=10, pady=20)
+        serveDrinks = Button(rightFrame, text="Serve Drinks", height = 9, width = 20, bg = "VioletRed4", font = fontOrig, command=self.serve_drinks)
+        serveDrinks.grid(row=1, column=0, padx=10, pady=20)
     
-WIDTH = 3000
-HEIGHT = 2000
+    #displays the british guy on the screen: returns a top level window to destroy later
+    def callBritishGuy(self):
+        #pop up british image
+        imageBritish = Toplevel()
+        imageBritish.configure(background = "black")
+        imageBritish.title("Tipsy Engineers Incorporated")
+        try:
+            imageEx = PhotoImage(file ='BritishGuyFace.png')
+            Label(imageBritish, image=imageEx).grid(row=0, column=0, padx=10, pady=2)
+            imageEx.image = imageEx
+            imageEx.pack()
+        except:
+            print("British guy not found")
+        return imageBritish
+    
+    #method that calls return trip back to customer
+    #will open a warning box if the user attempts to press this button
+    def serve_drinks(self):
+        if self.robotDetails.posX != 0 and self.robotDetails.posY != 0:
+            tkMessageBox.showinfo("Warning!", "You are not a bartender authorized to press this button!")
+        else:
+            print "Call adaptive mapping code from bartender to customer"
+            #pop up british image
+            imageBritish = self.callBritishGuy()
+            '''
+            self.robotDetails.Adap.runAdaptiveMappingToCustomer()
+            self.robotDetails.posX = STARTX
+            self.robotDetails.posY = STARTY
+            self.robotDetails.endX = ENDX
+            self.robotDetails.endY = ENDY
+            '''
+            #imageBritish.destroy()
+    
+    #method that calls window to open drink menu       
+    def place_order(self):
+        if self.robotDetails.posX == 0 and self.robotDetails.posY == 0:
+            tkMessageBox.showinfo("Warning!", "You are not a customer!")
+        else:
+            #set the font
+            helv24 = tkFont.Font(family='Helvetica',
+            size=20, weight='bold')
+            #set a new window to put menu on
+            top = Toplevel()
+            top.configure(background = "black")
+            top.title("Tipsy Engineers Drink Menu")
+        
+            #do the left side menu 
+            leftFrame = Frame(top, width=200, height = 600)
+            leftFrame.grid(row=0, column=0, padx=10, pady=2)
+            leftFrame.config(background = "VioletRed4")
+            drink1 = Button(leftFrame, text="Strawberry Lemonade", font=helv24, command=lambda: self.callAdaptiveMapToBartender(0, top))
+            drink1.grid(row=1, column=1, pady=15)
+            drink2 = Button(leftFrame, text="Surprise Me!", font=helv24, command=lambda: self.callAdaptiveMapToBartender(1, top))
+            drink2.grid(row=2, column=1, pady=15)
+            drink3 = Button(leftFrame, text="Coca-Cola", font=helv24, command=lambda: self.callAdaptiveMapToBartender(2, top))
+            drink3.grid(row=3, column=1, pady=15)
+            drink4 = Button(leftFrame, text="Sprite", font=helv24, command=lambda: self.callAdaptiveMapToBartender(3, top))
+            drink4.grid(row=4, column=1, pady=15)
+            drink5 = Button(leftFrame, text="Sparkling Cider", font=helv24, command=lambda: self.callAdaptiveMapToBartender(4, top))
+            drink5.grid(row=5, column=1, pady=15)
+            
+            #these are the right frame things
+            rightFrame = Frame(top, width=200, height = 600)
+            rightFrame.grid(row=0, column=1, padx=10, pady=2)
+            rightFrame.config(background = "black")
+            drink6 = Button(rightFrame, text="Shirley Temple", font=helv24, command=lambda: self.callAdaptiveMapToBartender(5, top))
+            drink6.grid(row=1, column=2, pady=15)
+            drink7 = Button(rightFrame, text="Roy Rogers", font=helv24, command=lambda: self.callAdaptiveMapToBartender(6, top))
+            drink7.grid(row=2, column=2, pady=15)
+            drink8 = Button(rightFrame, text="The DD", font=helv24, command=lambda: self.callAdaptiveMapToBartender(7, top))
+            drink8.grid(row=3, column=2, pady=15)
+            drink9 = Button(rightFrame, text="Root Beer Float", font=helv24, command=lambda: self.callAdaptiveMapToBartender(8, top))
+            drink9.grid(row=4, column=2, pady=15)
+            drink10 = Button(rightFrame, text="Club Soda and Lime", font=helv24, command=lambda: self.callAdaptiveMapToBartender(9, top))
+            drink10.grid(row=5, column=2, pady=15)
+    
+    def callAdaptiveMapToBartender(self, index, top):
+        top.destroy() #we exit out out of this drink menu
+        clipSound = AUDIO_CLIPS[index]
+        self.robotDetails.drinks = clipSound #keep track of what drink it is
+        pygame.mixer.music.load(clipSound)
+        pygame.mixer.music.play()
+        time.sleep(6)
+        #pop up british image
+        imageBritish = self.callBritishGuy()
+        print "call adaptive mapping!!!"
+        '''
+        self.robotDetails.Adap.runAdaptiveMappingToBartender()
+        self.robotDetails.posX = ENDX
+        self.robotDetails.posY = ENDY
+        self.robotDetails.endX = STARTX
+        self.robotDetails.endY = STARTY
+        '''
+        #imageBritish.destroy()
+        
 root = Tk() #Makes the window
 root.wm_title("Tipsy Engineers Incorporated") #Makes the title that will appear in the top left
 root.config(background = "black") #sets background color to white
-
-#Left Frame and its contents
-leftFrame = Frame(root, width=200, height = 600)
-leftFrame.grid(row=0, column=0, padx=10, pady=2)
-leftFrame.config(background = "black")
-try:
-    imageEx = PhotoImage(file = 'bar.png')
-    Label(leftFrame, image=imageEx).grid(row=2, column=0, padx=10, pady=2)
-except:
-    print("Image not found")
-
-#Right Frame and its contents
-rightFrame = Frame(root, width=200, height = 600)
-rightFrame.grid(row=0, column=1, padx=10, pady=2)
-rightFrame.config(background = "black")
-#change the dimensions for the surface!!!
-fontOrig = tkFont.Font(family='Helvetica', size = 20, weight = "bold")
-newButton = Button(rightFrame, text="Order Drinks", height = 10, width = 20, bg = "purple", font = fontOrig)
-newButton.grid(row=0, column=0, padx=10, pady=20)
-OrderDrinks = Button(rightFrame, text="Serve Drinks", height = 10, width = 20, bg = "purple", font = fontOrig, command = placeOrder())
-OrderDrinks.grid(row=1, column=0, padx=10, pady=20)
-
+robot = RobotDetails(4, 2, 0, 0)
+app = App(root, robot)
 root.mainloop()
