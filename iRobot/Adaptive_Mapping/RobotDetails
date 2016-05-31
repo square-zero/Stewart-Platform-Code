@@ -1,0 +1,18 @@
+'''
+Created on May 29, 2016
+
+@author: Amanda Loh
+'''
+from AdaptiveMapping import AdaptiveMapping
+class RobotDetails:
+    #this constructs an object that keeps track of where the robot is
+    #keeps track of robot x and y as well as destination x and y
+    #also keeps track of how many drinks go to the bartender
+    def __init__(self,posX, posY, endX, endY):
+        self.posX = posX
+        self.posY = posY
+        self.endX = endX
+        self.endY = endY
+        self.drinks = "" #string is empty when delivering beverages being delivered
+        self.count = 0 #count how many drinks we have ordered
+        self.Adap = AdaptiveMapping(posX, posY, endX, endY)
