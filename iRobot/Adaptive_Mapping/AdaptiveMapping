@@ -35,7 +35,7 @@ class AdaptiveMapping:
         self.posY = posY
         self.endX = endX
         self.endY = endY
-        #self.__onConnect() #connect to the robot
+        self.__onConnect() #connect to the robot #connect to robot
         
     def __onConnect(self):
         global connection
@@ -84,8 +84,9 @@ class AdaptiveMapping:
             time.sleep(3)
             self.sendCommandASCII('137 00 00 00 00') #stop
     
-    #This is the recursive adapting mapping function that recursively recomputes the wavefront
-    #algo until a valid path is found 
+    
+    #This is the recursive adapting mapping function that recursively recomputes the wavefront algo until
+    #a valid path is found 
     #Parameters
     #robotPosX = input of robot's current x coordinate position: int
     #robotPosY = input of robot's current y coordinate position: int
@@ -98,20 +99,7 @@ class AdaptiveMapping:
     def adaptiveMapping(self, robotPosX, robotPosY, goalX, goalY, floorMap, compass, origFloorMap):
         if robotPosX == goalX and robotPosY == goalY:
             print "PATH COMPLETED! I got into base case"
-            if compass == "North":
-                #want to rotate 180 degrees
-                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
-                time.sleep(1) #pause for 90degree turn
-                self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
-                time.sleep(1) #pause for 90degree turn
-            elif compass == "East":
-                self.sendCommandASCII('137 255 56 00 01') #turn clockwise
-                time.sleep(1) #pause for 90degree turn
-            elif compass == "West":
-                self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
-                time.sleep(1) #pause for 90degree turn
-            compass = "South"
-            self.sendCommandASCII('137 00 00 00 00') #stop
+            #never get in here actually
         else:
             planner = waveFrontPlanner(floorMap, False)
             planner.setRobotPosition(robotPosX, robotPosY)
@@ -153,7 +141,6 @@ class AdaptiveMapping:
         PERIPH = 49
         #For the inside sensors that detect objects right in front the range = 33
         INSIDE = 49
-        #try all the ACM ports because it's bound to be one of these
         ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM3']
         for usbPort in ports:
             try:
@@ -168,7 +155,7 @@ class AdaptiveMapping:
         sum4 = 0.0
         
         #sleep for a minute so we can poll resl time values
-        time.sleep(5)
+        #time.sleep(5)
         n = 35
         print "Check to see if there is an obstacle now!!!"
         for _ in range(n):
@@ -217,7 +204,6 @@ class AdaptiveMapping:
             print "OBSCACLEEEE"
             return True
 
-    
     #this is actually the drive module that actually sends command to the robot: before the robot moves forward,
     #the sensors will check to see if there is an obstacle
     #if there is one, the current location of the robot is returned as well as its orientation so the wavefront algo
@@ -240,7 +226,9 @@ class AdaptiveMapping:
             currX = listXYs[0]
             currY = listXYs[1]
             print "Going to: " + str(currX) + "," + str(currY)
+            
             #There are four cases of places you could go
+            
             #GOING NORTH
             if (prevX - 1 == currX):
                 #need to check if there is something in square
@@ -318,7 +306,6 @@ class AdaptiveMapping:
                 print prevY
                 print compass
                 return prevX, prevY, compass #return the current robot's location and compass
-            #DRIVE FORWARD
             #after each iteration wanna drive forward
             self.sendCommandASCII('137 00 148 80 00') #drive: forward
             time.sleep(1)#pause
@@ -327,9 +314,21 @@ class AdaptiveMapping:
             #update the prev to the currX     
             prevX = currX
             prevY = currY
-            print "We update x and Y of robot curr pos"
-            #print prevX #debugging purposes
-            #print prevY #debugging purposes
+            if prevX == goalX and prevY == goalY: #if we are at goal we need to re-calibrate to always start South!!!
+                if compass == "North":
+                    #want to rotate 180 degrees
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                    self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "East":
+                    self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+                    time.sleep(1) #pause for 90degree turn
+                elif compass == "West":
+                    self.sendCommandASCII('137 255 56 255 255') #turn countercloskwise
+                    time.sleep(1) #pause for 90degree turn
+                compass = "South"
+                self.sendCommandASCII('137 00 00 00 00') #stop
     
     #All Methods NEEDED FOR THE IROBOT INTEGRATION/DRIVER   
     # sendCommandASCII takes a string of whitespace-separated, ASCII-encoded base 10 values to send
