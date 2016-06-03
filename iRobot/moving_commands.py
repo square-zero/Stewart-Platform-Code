@@ -22,7 +22,9 @@ def move_forward():
 		#200 mm/s is max speed, accelerate slowly until reach max speed	
 	while curr_speed < max_speed: 
 		curr_speed += acceleration
-		self.sendCommandASCII('145 ' + '''v high byte''' + '''v low byte''' + '255 255') #
+		# Ryan's edit to convert curr_speed to high and low bytes
+		high, low = bytes(curr_speed)
+		self.sendCommandASCII('145 ' + 'high' + 'low' + '255 255') #
 		timer.sleep(sleep_time)
 
 	#now at max speed, check total distance
@@ -74,6 +76,8 @@ def dec_to_two_comp_to_hex(number, bits = 16):
         #need to now convert to hex
     return val           
 
+def bytes(integer):
+	return divmod(integer, 0x100)
 
 def in_to_mm(numb):
 	return numb * 25.4
