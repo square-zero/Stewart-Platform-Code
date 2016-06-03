@@ -7,7 +7,16 @@
 int counterx;
 int countery;
 int checkCounter;
-int reset_counter;
+int forwardx;
+int forwardy;
+int leftTurnX;
+int leftTurnY;
+int rightTurnX;
+int rightTurnY;
+
+
+
+
 #include "ps2.h"
 PS2 mouse(6,5);
 void setup(){
@@ -19,28 +28,28 @@ void setup(){
   counterx = 0;
   countery = 0;
   checkCounter = 0;
-  reset_counter = 0
+  squareDistance = something some thing something 
 }
 void loop(){
   char stat,x,y;
   mouse.mouse_pos(stat,x,y);
-  
-  counterx += x;
-  countery += y;
-  checkCounter += 1;
 
-  if(x == y == 0) {
-    reset_counter++; 
+  if (x == 0 && y == 0) { //if not moving, start counting
+    checkCounter += 1;
+  } else { //if moving, count total distance
+    counterx += x;
+    countery += y;
   }
 
-  if(reset_counter >= 50) { //reset everything if still
-    counterx = 0
-    countery = 0
-    checkCounter = 0
-    reset_counter = 0
-  }
+  if (checkCounter >= 10) { //if stopped for long enough
+    counterx = 0; //reset counters
+    countery = 0;
+    // check actual distance it should have gone, find difference
 
-  if (checkCounter >= 100){
+  }
+  serial.println(countery)
+/*
+  if (checkCounter >= 1000){
     Serial.print(stat, BIN);
     Serial.print("\tx=");
     Serial.print(x, DEC);
@@ -52,7 +61,7 @@ void loop(){
     Serial.println(countery);
     checkCounter = 0;
   }
-  
+  */
   delay(1);
 }
 
