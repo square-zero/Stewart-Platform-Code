@@ -16,7 +16,7 @@ def move_forward():
 	acceleration = 10
 	curr_speed = 0 #in mm/s
 	max_speed = 200
-	max_mouse = 15680 #raw serial number from mouse.ino for 14 inch movement
+	goal_distance = 15680 #raw serial number from mouse.ino for 14 inch movement
 	deceleration_distance = 0.5 *  (((max_speed * sleep_time)**2) / acceleration)  
 		#14 incehs, maximize speed, max speed at 7 inches, 
 		#200 mm/s is max speed, accelerate slowly until reach max speed	
@@ -26,16 +26,18 @@ def move_forward():
 		high, low = bytes(curr_speed)
 		self.sendCommandASCII('145 ' + 'high' + 'low' + '255 255') #
 		timer.sleep(sleep_time)
+	accel_distance = ser.readline()	
 
 	#now at max speed, check total distance
-	while goal_distance - ser.readline() > deceleration_distance:
+	while goal_distance - ser.readline() > accel_distance:
 	 	pass #do nothing, wait until within distance
 
 	#at this point goal_distance - mouse_distance <= deceleration_distance:
 	while curr_speed > 0:
 	 	#decelerate
 	 	curr_speed -= acceleration
-	 	self.sendCommandASCII('145 ' + '''v high byte''' + '''v low byte''' + '255 255') #
+		high, low = bytes(curr_speed)
+		self.sendCommandASCII('145 ' + 'high' + 'low' + '255 255') #
 		timer.sleep(sleep_time)
 
 	 #congrats, you are now stopped 
