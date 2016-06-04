@@ -3,7 +3,7 @@ import time
 import serial
 
 
-ports = ['/dev/ttyAMC2']
+ports = ['/dev/ttyAMC1']
 for usbPort in ports:
 	try:
 		ser = serial.Serial(usbPort, baudrate = 9600)
