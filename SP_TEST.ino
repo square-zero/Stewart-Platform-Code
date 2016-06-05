@@ -32,6 +32,32 @@
  *    Mathematics Of The Stewart Platform
  *    https://web.archive.org/web/20130506134518/http://www.wokinghamu3a.org.uk/Maths%20of%20the%20Stewart%20Platform%20v5.pdf    
  */
+
+/*
+ *  Things you can change
+ */
+const int ACCEL_SAMPLES = 10; // number of samples from accelerometer to keep and use
+const int WEIGHT_INERTIA = 3; // how weighted the samples are
+                // Must be greater than 0
+                // higher numbers will make values closer in magnitude to G
+                // more trusted in calculating average accel
+
+// default gains for XY adjust
+#define P_GAIN_XY 0.1
+#define I_GAIN_XY 0.3
+#define D_GAIN_XY 0
+
+// default gains for tilt adjust
+#define P_GAIN_TILT 0.2 
+#define I_GAIN_TILT 0.1
+#define D_GAIN_TILT 0.0
+
+// how much to tilt when we compensate
+const float TILT_SCALE = 0.5;
+
+/*
+ *  Things to include
+ */
 #include <Servo.h>
 #include <MatrixMath.h>
 #include <SPI.h>
@@ -118,7 +144,6 @@ const float microSec  = 0.000001;   // to convert micro-seconds to seconds
  *  at various points in the code, and configured during setup if needed.
  */
 Adafruit_MMA8451 mma_a;
-Adafruit_MMA8451 mma_b;
  
 /*
  *  Instantiating six servos in an array for easy access. Each servo is
@@ -212,9 +237,9 @@ float tDisp[3] = {0, 0, 0};
 float pTilt[3] = {0, 0, 0};
 float const DISP_OFFSET[] = {0, 0, 0};
 float accel[3];
-
-const int ACCEL_SAMPLES = 10; // number of samples from accelerometer to keep and use
 float accelData[ACCEL_SAMPLES][3];
+float accelWeights[ACCEL_SAMPLES];
+float expectedMag;
 
 /*
  *  PID VARIABLES
@@ -229,17 +254,11 @@ float accelData[ACCEL_SAMPLES][3];
 float dT = 20000*microSec;
 
 // XY adjust PID (not implemented)
-#define P_GAIN_XY 0.1
-#define I_GAIN_XY 0.3
-#define D_GAIN_XY 0
 float k_P_xy, k_I_xy, k_D_xy;
 float iErr[2] = {0, 0};
 float lastErr[2] = {0, 0};
 
 // Tilt adjust PID (implemented)
-#define P_GAIN_TILT 0.2 
-#define I_GAIN_TILT 0.1
-#define D_GAIN_TILT 0.0
 float k_P_tilt, k_I_tilt, k_D_tilt;
 float iErr_t[2] = {0, 0};
 float lastErr_t[2] = {0, 0};
@@ -342,6 +361,14 @@ void setup() {
   delay(300);
   Serial.println("DONE.");
 
+  // calculate expected magnitude of gravity
+  expectedMag = 0;
+  for (int i = 0; i < ACCEL_SAMPLES; i++) {
+    expectedMag += calcExpMag();
+  }
+  expectedMag /= ACCEL_SAMPLES;
+  Serial.println("Expected magnitude = " + (String)(expectedMag));
+
   /*
    *  Initialize the rotation matrix for the platform.
    */
@@ -357,6 +384,7 @@ void setup() {
     for (int j = 0; j < 3; j++) {
       accelData[i][j] = 0;
     }
+    accelWeights[i] = 1;
   }
   
   /*
@@ -740,41 +768,46 @@ void calcOrientation() {
   float tempRotate[] = {0, 0, pi/3};
   float accelVals[3];
 
+  // temp sum
+  float tempWeight = 0.0;
+  float tempWeightSum = 0.0;
+  float tempAccel[3];
+
   // Read acceleration from Gyroscope
   // NOTE:
   // X- and Y-values are switched. This is because of the geometry of our platform
   // (( Lucas accidentally put the gyroscope on in the wrong way ))
   // (( this is a clever/hacky work-around ))
   readMMA_A();
+  mma_a.read();
   accel[0] = mma_a.y + ACCEL_OFFSET[0];
   accel[1] = mma_a.x + ACCEL_OFFSET[1];
   accel[2] = mma_a.z + ACCEL_OFFSET[2];
 
-  /*
-   *  Grab adjusted values for debugging purposes (to print to terminal)
-   */
-  if (0 == 1) {
-    // get a new sensor event
-    sensors_event_t event; 
-    mma_a.getEvent(&event);
-    accelVals[0] = event.acceleration.y + ACCEL_OFFSET[0];
-    accelVals[1] = event.acceleration.x + ACCEL_OFFSET[1];
-    accelVals[2] = event.acceleration.z + ACCEL_OFFSET[2];
-  
-    Matrix.Print(accelVals, 1, 3, "");
-  }
-
   // janky FIFO implementation
   for (int i = 0; i < ACCEL_SAMPLES - 1; i++) {
     for (int j = 0; j < 3; j++) {
+      // shift up all samples
       accelData[ACCEL_SAMPLES - i][j] = accelData[ACCEL_SAMPLES - i - 1][j];
     }
+    // shift up all weights
+    accelWeights[ACCEL_SAMPLES - i] = accelWeights[ACCEL_SAMPLES - i - 1];
   }
+  printMat(accel, 3, "accel");
+  printMat3(accelData, ACCEL_SAMPLES, "accelData");
+  printMat(accelWeights, ACCEL_SAMPLES, "accelWeights");
   
-  // store newest sample
+  // calc "weight" of data
+  // basically, the larger the magnitude, the less reliable this data is
+  // if it is closer to G in magnitude, we should trust it more
+  float test[3] = {1000,1000,4500};
+  accelWeights[0] = pow((expectedMag/calcVecMag(test)), 1);
+  
+  // store newest sample + weight
   for (int i = 0; i < 3; i++) {
     accelData[0][i] = accel[i];
   }
+  accelWeights[0] = tempWeight;
   
   // clear avg accel data
   for (int i = 0; i < 3; i++) {
@@ -784,13 +817,14 @@ void calcOrientation() {
   // sum all samples
   for (int i = 0; i < ACCEL_SAMPLES; i++) {
     for (int j = 0; j < 3; j++) {
-      accel[j] += accelData[i][j];
+      accel[j] += accelData[i][j] * accelWeights[i];
     }
+    tempWeightSum += accelWeights[i];
   }
   
   // average
   for (int i = 0; i < 3; i++) {
-    accel[i] /= ACCEL_SAMPLES;
+    accel[i] /= tempWeightSum;
   }
    
   // Normalize the acceleration vector
@@ -830,10 +864,10 @@ void calcOrientation() {
     // but to minimize the risk of problems, we'll leave it at zero for now.
     orientation_ref[2] = 0;
 
-    // NEGATE ORIENTATION
+    // NEGATE AND SCALE ORIENTATION
     // This will cause platform to rotate towards center
     for (int i = 0; i < 3; i++) {
-      orientation_ref[i] = -orientation_ref[i];
+      orientation_ref[i] = -orientation_ref[i] * TILT_SCALE;
     }
   
     // MAXIMUM TILT CONDITION
@@ -1394,6 +1428,18 @@ void printMat(float mat[], int size, String name) {
 void readMMA_A() {
     // read the acceleration values from the gyroscope
     mma_a.read();
+}
+
+// calculates the expected magnitude of the acceleration vector
+// assumes that it is not accelerating when this part runs
+float calcExpMag() {
+  float temp[3] = {0,0,0};
+  readMMA_A();
+  temp[0] = mma_a.y;
+  temp[1] = mma_a.x;
+  temp[2] = mma_a.z;
+
+  return calcVecMag(temp);
 }
 
 #ifdef DEBUG
