@@ -28,7 +28,6 @@ void setup(){
   counterx = 0;
   countery = 0;
   checkCounter = 0;
-  squareDistance = something some thing something 
 }
 void loop(){
   char stat,x,y;
