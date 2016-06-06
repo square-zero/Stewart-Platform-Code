@@ -334,7 +334,8 @@ class TetheredDriveApp(Tk):
             (high, low) = divmod(curr_speed, 0x100)
             self.sendCommandASCII('145 ' + str(high) + " " + str(low) + " " + str(high) + " " + str(low)) #
             time.sleep(sleep_time)
-    
+        
+        self.sendCommandASCII('137 00 00 00 00') #stop
          #congrats, you are now stopped 
 
     def turn_left(self):
