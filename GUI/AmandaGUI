@@ -26,6 +26,7 @@ ENDY = 0
 
 class App:
     def __init__(self, master, robotDetails):
+        self.center(master)
         self.robotDetails = robotDetails
         #Left Frame and its contents
         leftFrame = Frame(root, width=200, height = 600)
@@ -35,8 +36,7 @@ class App:
             imageEx = PhotoImage(file ='cocktail.png')
             Label(leftFrame, image=imageEx).grid(row=2, column=0, padx=10, pady=2)
             imageEx.image = imageEx
-            imageEx.pack()
-            
+            imageEx.pack() 
         except:
             print("Image not found")
 
@@ -51,12 +51,24 @@ class App:
         serveDrinks = Button(rightFrame, text="Serve Drinks", height = 9, width = 20, bg = "VioletRed4", font = fontOrig, command=self.serve_drinks)
         serveDrinks.grid(row=1, column=0, padx=10, pady=20)
     
+    #center each window
+    def center(self, toplevel):
+        toplevel.withdraw()
+        toplevel.update_idletasks()  # Update "requested size" from geometry manager
+        x = (toplevel.winfo_screenwidth() - toplevel.winfo_reqwidth()) / 2
+        y = (toplevel.winfo_screenheight() - toplevel.winfo_reqheight()) / 2
+        toplevel.geometry("+%d+%d" % (x, y))
+        # This seems to draw the window frame immediately, so only call deiconify()
+        # after setting correct window position
+        toplevel.deiconify()
+
     #displays the british guy on the screen: returns a top level window to destroy later
     def callBritishGuy(self):
         #pop up british image
         imageBritish = Toplevel()
         imageBritish.configure(background = "black")
         imageBritish.title("Tipsy Engineers Incorporated")
+        self.center(imageBritish)
         try:
             imageEx = PhotoImage(file ='BritishGuyFace.png')
             Label(imageBritish, image=imageEx).grid(row=0, column=0, padx=10, pady=2)
@@ -73,6 +85,9 @@ class App:
             tkMessageBox.showinfo("Warning!", "You are not a bartender authorized to press this button!")
         else:
             print "Call adaptive mapping code from bartender to customer"
+            pygame.mixer.music.load("DeliverDrinks.mp3")
+            pygame.mixer.music.play()
+            time.sleep(3)
             #pop up british image
             imageBritish = self.callBritishGuy()
             self.robotDetails.Adap.runAdaptiveMappingToCustomer()
@@ -95,7 +110,7 @@ class App:
             top = Toplevel()
             top.configure(background = "black")
             top.title("Tipsy Engineers Drink Menu")
-        
+            self.center(top)
             #do the left side menu 
             leftFrame = Frame(top, width=200, height = 600)
             leftFrame.grid(row=0, column=0, padx=10, pady=2)
@@ -126,6 +141,7 @@ class App:
             drink10 = Button(rightFrame, text="Club Soda and Lime", font=helv24, command=lambda: self.callAdaptiveMapToBartender(9, top))
             drink10.grid(row=5, column=2, pady=15)
     
+    
     def callAdaptiveMapToBartender(self, index, top):
         top.destroy() #we exit out out of this drink menu
         clipSound = AUDIO_CLIPS[index]
@@ -135,15 +151,17 @@ class App:
         time.sleep(6)
         #pop up british image
         imageBritish = self.callBritishGuy()
-        
         #call adaptive mapping component!
         print "call adaptive mapping to bartender"
         self.robotDetails.Adap.runAdaptiveMappingToBartender()
+
         self.robotDetails.posX = ENDX
         self.robotDetails.posY = ENDY
         self.robotDetails.endX = STARTX
         self.robotDetails.endY = STARTY
         
+        #set the initialized to true
+        self.robotDetails.alreadyInit = True
         #destroy british guy image before telling bartender what was ordered
         imageBritish.destroy()
         self.displayOrder(index)
@@ -155,7 +173,7 @@ class App:
         order.title("Tipsy Engineers Incorporated")
         newText = Text(order, width=50, height=8, takefocus=0)
         newText.grid(row=0, column=0, padx=10, pady=2)
-        
+        self.center(order)
         #alert to the bartender what drink was ordered!!!
         drink = AUDIO_CLIPS[index]
         if drink == "Strawberry-Lemonade.mp3":
@@ -184,6 +202,6 @@ class App:
 root = Tk() #Makes the window
 root.wm_title("Tipsy Engineers Incorporated") #Makes the title that will appear in the top left
 root.config(background = "black") #sets background color to white
-robot = RobotDetails(4, 2, 0, 0)
+robot = RobotDetails(4, 2, 0, 0, False)
 app = App(root, robot)
 root.mainloop()
