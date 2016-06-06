@@ -39,7 +39,7 @@
 from Tkinter import *
 import tkMessageBox
 import tkSimpleDialog
-import moving_commands as mc
+import time
 
 import struct
 import sys, glob # for listing serial ports
@@ -152,19 +152,19 @@ class TetheredDriveApp(Tk):
 
     # get8Unsigned returns an 8-bit unsigned value.
     def get8Unsigned(self):
-        return getDecodedBytes(1, "B")
+        return self.getDecodedBytes(1, "B")
 
     # get8Signed returns an 8-bit signed value.
     def get8Signed(self):
-        return getDecodedBytes(1, "b")
+        return self.getDecodedBytes(1, "b")
 
     # get16Unsigned returns a 16-bit unsigned value.
     def get16Unsigned(self):
-        return getDecodedBytes(2, ">H")
+        return self.getDecodedBytes(2, ">H")
 
     # get16Signed returns a 16-bit signed value.
     def get16Signed(self):
-        return getDecodedBytes(2, ">h")
+        return self.getDecodedBytes(2, ">h")
 
     # A handler for keyboard events. Feel free to add more!
     def callbackKey(self, event):
@@ -199,13 +199,13 @@ class TetheredDriveApp(Tk):
                 self.callbackKeyRight = True
                 motionChange = True
             elif k == '1':
-                mc.move_forward()
+                self.move_forward()
             elif k == '2':
-                mc.turn_left()
+                self.turn_left()
             elif k == '3':
-                mc.turn_right()
+                self.turn_right()
             elif k == '4':
-                mc.turn_around()
+                self.turn_around()
             else:
                 print(repr(k), "not handled")
         elif event.type == '3': # KeyRelease; need to figure out how to get constant
@@ -301,7 +301,91 @@ class TetheredDriveApp(Tk):
                 result.append(port)
             except (OSError, serial.SerialException):
                 pass
-        return result    
+        return result   
+    def move_forward(self):
+        sleep_time = .001 #in seconds
+        acceleration = 1 #in mm/s/s
+        curr_speed = 0 #in mm/s
+        max_speed = 400 #in mm/s
+        # goal_distance = 15680 #raw serial number from mouse.ino for 14 inch movement
+        # deceleration_distance = 0.5 *  (((max_speed * sleep_time)**2) / acceleration)  
+            #14 incehs, maximize speed, max speed at 7 inches, 
+            #200 mm/s is max speed, accelerate slowly until reach max speed    
+    
+        for i in range(max_speed): #accelerate 1mm/s every ms
+            curr_speed += acceleration
+            # Ryan's edit to convert curr_speed to high and low bytes
+#             (high, low) = bytes(curr_speed)
+            (high, low) = divmod(curr_speed, 0x100)
+            self.sendCommandASCII('145 ' + str(high) + " " + str(low) + " " + str(high) + " " + str(low)) #
+            time.sleep(sleep_time)
+    
+        # accel_distance = ser.readline()    
+    
+        #now at max speed, check total distance
+        # while goal_distance - ser.readline() > accel_distance:
+        #      pass #do nothing, wait until within distance
+        time.sleep(0.12)
+    
+        #at this point goal_distance - mouse_distance <= deceleration_distance:
+        for i in range(max_speed):
+             #decelerate
+            curr_speed -= acceleration
+            (high, low) = divmod(curr_speed, 0x100)
+            self.sendCommandASCII('145 ' + str(high) + " " + str(low) + " " + str(high) + " " + str(low)) #
+            time.sleep(sleep_time)
+    
+         #congrats, you are now stopped 
+
+    def turn_left(self):
+        #x_max = 50
+        
+        self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise/left
+    
+        time.sleep(0.95) #test this to make sure that it truly turns 90 deg
+        # while ser.readline() < x_max:
+        #     time.sleep(1) #or just pass
+        self.sendCommandASCII('137 00 00 00 00') #stop
+    
+    
+    def turn_right(self):
+        # x_max = -50
+    
+        self.sendCommandASCII('137 255 56 00 01') #turn clockwise
+        
+        time.sleep(0.95)
+    
+        # while ser.readline() < x_max: #in case x and y values are individually slightly off...fucked if they ever are
+        #     pass
+        self.sendCommandASCII('137 00 00 00 00') #stop
+    
+    
+    def turn_around(self):
+        # x_max = 100 #(double turn left/right max)
+        
+        self.sendCommandASCII('137 255 56 255 255')
+    
+        time.sleep(1.9)
+        # while ser.readline() < x_max:
+        #     time.sleep(1)
+        self.sendCommandASCII('137 00 00 00 00')
+#     
+#     def dec_to_two_comp_to_hex(number, bits = 16):
+#         if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
+#             val = val - (1 << bits)        # compute negative value
+#     
+#             #need to now convert to hex
+#         return val           
+    
+    def bytes(self, integer):
+        return divmod(integer, 0x100)
+#     
+#     def in_to_mm(self, numb):
+#         return numb * 25.4
+#     
+#     
+#     def mm_to_in(self, numb):
+#         return numb / 25.4 
 
 if __name__ == "__main__":
     app = TetheredDriveApp()
