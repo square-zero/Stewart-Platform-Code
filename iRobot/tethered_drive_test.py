@@ -325,7 +325,7 @@ class TetheredDriveApp(Tk):
         #now at max speed, check total distance
         # while goal_distance - ser.readline() > accel_distance:
         #      pass #do nothing, wait until within distance
-        time.sleep(0.12)
+        time.sleep(0.12)  #CHANGE THIS VALUE WHEN TUNING
     
         #at this point goal_distance - mouse_distance <= deceleration_distance:
         for i in range(max_speed):
@@ -343,7 +343,7 @@ class TetheredDriveApp(Tk):
         
         self.sendCommandASCII('137 255 56 255 255') #turn counterclockwise/left
     
-        time.sleep(0.95) #test this to make sure that it truly turns 90 deg
+        time.sleep(0.95)  #CHANGE THIS VALUE WHEN TUNING
         # while ser.readline() < x_max:
         #     time.sleep(1) #or just pass
         self.sendCommandASCII('137 00 00 00 00') #stop
@@ -354,7 +354,7 @@ class TetheredDriveApp(Tk):
     
         self.sendCommandASCII('137 255 56 00 01') #turn clockwise
         
-        time.sleep(0.95)
+        time.sleep(0.95) #CHANGE THIS VALUE WHEN TUNING
     
         # while ser.readline() < x_max: #in case x and y values are individually slightly off...fucked if they ever are
         #     pass
@@ -366,7 +366,7 @@ class TetheredDriveApp(Tk):
         
         self.sendCommandASCII('137 255 56 255 255')
     
-        time.sleep(1.9)
+        time.sleep(1.9) #CHANGE THIS VALUE WHEN TUNING
         # while ser.readline() < x_max:
         #     time.sleep(1)
         self.sendCommandASCII('137 00 00 00 00')
