@@ -10,7 +10,6 @@ import tkMessageBox
 import pygame
 pygame.init()
 import time
-from AdaptiveMapping import AdaptiveMapping
 
 #CONSTANTS
 MAX_DRINKS = 2 #max drinks you can order at a time
@@ -26,7 +25,6 @@ ENDY = 0
 
 class App:
     def __init__(self, master, robotDetails):
-        self.center(master)
         self.robotDetails = robotDetails
         #Left Frame and its contents
         leftFrame = Frame(root, width=200, height = 600)
@@ -90,6 +88,7 @@ class App:
             time.sleep(3)
             #pop up british image
             imageBritish = self.callBritishGuy()
+            #run adaptive mapping
             self.robotDetails.Adap.runAdaptiveMappingToCustomer()
             self.robotDetails.posX = STARTX
             self.robotDetails.posY = STARTY
@@ -152,8 +151,10 @@ class App:
         #pop up british image
         imageBritish = self.callBritishGuy()
         #call adaptive mapping component!
+        
         print "call adaptive mapping to bartender"
         self.robotDetails.Adap.runAdaptiveMappingToBartender()
+        
 
         self.robotDetails.posX = ENDX
         self.robotDetails.posY = ENDY
@@ -202,6 +203,6 @@ class App:
 root = Tk() #Makes the window
 root.wm_title("Tipsy Engineers Incorporated") #Makes the title that will appear in the top left
 root.config(background = "black") #sets background color to white
-robot = RobotDetails(4, 2, 0, 0, False)
+robot = RobotDetails(10, 4, 0, 0, False)
 app = App(root, robot)
 root.mainloop()
